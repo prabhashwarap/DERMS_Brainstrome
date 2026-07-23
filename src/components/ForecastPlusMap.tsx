@@ -151,6 +151,15 @@ function hashStr(s: string): number {
   return h;
 }
 
+const routeKey = (sub: [number, number], t: [number, number]) =>
+  `${sub[0]}_${sub[1]}--${t[0]}_${t[1]}`;
+
+const fallbackRoute = (sub: [number, number], t: [number, number]): Array<[number, number]> => [
+  sub,
+  [sub[0], t[1]],
+  t,
+];
+
 // Deterministic per-feeder forecast so aggregate stats are a real roll-up of
 // whatever is in scope (a single feeder, a CSC's feeders, a branch, or all).
 function feederMetrics(feederId: string): { peak: number; energy: number; peakHour: number } {
@@ -417,15 +426,6 @@ export function ForecastPlusMap() {
 
   const [roadRoutes, setRoadRoutes] = useState<Record<string, Array<[number, number]>>>({});
 
-  const routeKey = (sub: [number, number], t: [number, number]) =>
-    `${sub[0]}_${sub[1]}--${t[0]}_${t[1]}`;
-
-  const fallbackRoute = (sub: [number, number], t: [number, number]): Array<[number, number]> => [
-    sub,
-    [sub[0], t[1]],
-    t,
-  ];
-
   // Fetch OSRM road paths so distribution lines follow the street network at
   // every scope. A wide view (all branches) can need ~140 routes, so we run them
   // through a small concurrency-limited queue rather than firing all at once,
@@ -619,113 +619,14 @@ export function ForecastPlusMap() {
     },
   ];
 
-  return (
-    <div className="flex flex-col w-full h-[calc(100vh-90px)] gap-4">
-      {/* Top Bar (Filters & Data Summary) */}
-      <div className="flex justify-between items-start gap-4 flex-wrap lg:flex-nowrap">
-        
-        {/* Filters Panel */}
-        <div className="bg-card p-4 rounded-lg border border-border flex gap-4 items-end shadow-sm">
-          <div>
-            <label className="block text-xs text-muted-foreground mb-1 font-medium">Branch</label>
-            <select 
-              value={branch} 
-              onChange={handleBranchChange}
-              className="h-9 px-3 py-1 bg-background border border-border rounded-md text-sm min-w-[130px] focus:ring-1 focus:ring-primary"
-            >
-              <option value="all">All Branches</option>
-              {LECO_DATA.branches.map(b => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-muted-foreground mb-1 font-medium">CSC</label>
-            <select 
-              value={csc} 
-              onChange={handleCscChange}
-              disabled={branch === "all"}
-              className="h-9 px-3 py-1 bg-background border border-border rounded-md text-sm min-w-[130px] focus:ring-1 focus:ring-primary disabled:opacity-50"
-            >
-              <option value="all">All CSCs</option>
-              {availableCscs.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-muted-foreground mb-1 font-medium">Feeder</label>
-            <select 
-              value={feeder} 
-              onChange={(e) => setFeeder(e.target.value)}
-              disabled={csc === "all"}
-              className="h-9 px-3 py-1 bg-background border border-border rounded-md text-sm min-w-[130px] focus:ring-1 focus:ring-primary disabled:opacity-50"
-            >
-              <option value="all">All Feeders</option>
-              {availableFeeders.map(f => (
-                <option key={f.id} value={f.id}>{f.name}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Summary Panel */}
-        <div className="bg-card p-4 rounded-lg border border-border flex-1 lg:max-w-xl shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              {scopeLabel}
-            </span>
-            <span className="text-[11px] text-muted-foreground">
-              {stats.feederCount} feeder{stats.feederCount === 1 ? "" : "s"} in scope
-            </span>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 items-center">
-            <div className="flex flex-col border-r border-border/50 pr-4">
-              <span className="text-xs text-muted-foreground flex items-center gap-1 mb-1 whitespace-nowrap">
-                <Zap className="w-3 h-3 text-primary" /> Forecast Peak
-              </span>
-              <span className="font-bold text-lg">{peakVal} MW</span>
-            </div>
-            <div className="flex flex-col border-r border-border/50 pr-4">
-              <span className="text-xs text-muted-foreground flex items-center gap-1 mb-1 whitespace-nowrap">
-                <EnergyIcon className="w-3 h-3 text-amber-500" /> Forecast Energy
-              </span>
-              <span className="font-bold text-lg">{energyVal} MWh</span>
-            </div>
-            <div className="flex flex-col border-r border-border/50 pr-4">
-              <span className="text-xs text-muted-foreground flex items-center gap-1 mb-1 whitespace-nowrap">
-                <Clock className="w-3 h-3 text-blue-500" /> Time of Peak
-              </span>
-              <span className="font-bold text-lg">{timeHour}:00</span>
-            </div>
-            <div className="flex flex-col">
-              <span className="text-xs text-muted-foreground flex items-center gap-1 mb-1 whitespace-nowrap">
-                <Percent className="w-3 h-3 text-emerald-500" /> vs. Average
-              </span>
-              <span className={`font-bold text-lg ${stats.vsAverage >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                {stats.vsAverage >= 0 ? "+" : ""}{stats.vsAverage.toFixed(1)}%
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Map Area & Floating Overlay Container */}
-      <div className="flex-1 min-h-0 relative rounded-lg overflow-hidden border border-border shadow-sm">
-        
-        {/* Full Width Map View */}
-        <div className="w-full h-full">
-          <MapContainer center={mapCenter} zoom={mapZoom} style={{ height: "100%", width: "100%", zIndex: 0 }}>
-            <MapView sites={scopeCenters} center={mapCenter} zoom={mapZoom} />
-            <ZoomWatcher onZoom={setLiveZoom} />
-
-            {/* Carto Positron Crisp Light Tile Layer (100% Free & Reliable) */}
-            <TileLayer
-              attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-              url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-              maxZoom={19}
-            />
-
+  // The marker/line layers depend only on the filter scope, zoom-derived
+  // detail, and fetched routes -- never on `selectedNode`. Memoizing the
+  // element keeps its reference stable, so opening/closing the detail panel
+  // (a `selectedNode` change) makes React skip re-reconciling the hundreds of
+  // Leaflet layers instead of rebinding every marker's handlers.
+  const markerLayers = useMemo(
+    () => (
+      <>
             {/* LECO Org Hierarchy: Branch HQ */}
             {layers.branchHq && orgMarkers.branchHqs.map(b => {
               const nodeData: MapNodeDetails = {
@@ -1062,6 +963,119 @@ export function ForecastPlusMap() {
               );
             })}
 
+      </>
+    ),
+    [layers, orgMarkers, baseGrid, roadRoutes, consumers]
+  );
+
+  return (
+    <div className="flex flex-col w-full h-[calc(100vh-90px)] gap-4">
+      {/* Top Bar (Filters & Data Summary) */}
+      <div className="flex justify-between items-start gap-4 flex-wrap lg:flex-nowrap">
+        
+        {/* Filters Panel */}
+        <div className="bg-card p-4 rounded-lg border border-border flex gap-4 items-end shadow-sm">
+          <div>
+            <label className="block text-xs text-muted-foreground mb-1 font-medium">Branch</label>
+            <select 
+              value={branch} 
+              onChange={handleBranchChange}
+              className="h-9 px-3 py-1 bg-background border border-border rounded-md text-sm min-w-[130px] focus:ring-1 focus:ring-primary"
+            >
+              <option value="all">All Branches</option>
+              {LECO_DATA.branches.map(b => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-muted-foreground mb-1 font-medium">CSC</label>
+            <select 
+              value={csc} 
+              onChange={handleCscChange}
+              disabled={branch === "all"}
+              className="h-9 px-3 py-1 bg-background border border-border rounded-md text-sm min-w-[130px] focus:ring-1 focus:ring-primary disabled:opacity-50"
+            >
+              <option value="all">All CSCs</option>
+              {availableCscs.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-muted-foreground mb-1 font-medium">Feeder</label>
+            <select 
+              value={feeder} 
+              onChange={(e) => setFeeder(e.target.value)}
+              disabled={csc === "all"}
+              className="h-9 px-3 py-1 bg-background border border-border rounded-md text-sm min-w-[130px] focus:ring-1 focus:ring-primary disabled:opacity-50"
+            >
+              <option value="all">All Feeders</option>
+              {availableFeeders.map(f => (
+                <option key={f.id} value={f.id}>{f.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Summary Panel */}
+        <div className="bg-card p-4 rounded-lg border border-border flex-1 lg:max-w-xl shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {scopeLabel}
+            </span>
+            <span className="text-[11px] text-muted-foreground">
+              {stats.feederCount} feeder{stats.feederCount === 1 ? "" : "s"} in scope
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 items-center">
+            <div className="flex flex-col border-r border-border/50 pr-4">
+              <span className="text-xs text-muted-foreground flex items-center gap-1 mb-1 whitespace-nowrap">
+                <Zap className="w-3 h-3 text-primary" /> Forecast Peak
+              </span>
+              <span className="font-bold text-lg">{peakVal} MW</span>
+            </div>
+            <div className="flex flex-col border-r border-border/50 pr-4">
+              <span className="text-xs text-muted-foreground flex items-center gap-1 mb-1 whitespace-nowrap">
+                <EnergyIcon className="w-3 h-3 text-amber-500" /> Forecast Energy
+              </span>
+              <span className="font-bold text-lg">{energyVal} MWh</span>
+            </div>
+            <div className="flex flex-col border-r border-border/50 pr-4">
+              <span className="text-xs text-muted-foreground flex items-center gap-1 mb-1 whitespace-nowrap">
+                <Clock className="w-3 h-3 text-blue-500" /> Time of Peak
+              </span>
+              <span className="font-bold text-lg">{timeHour}:00</span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-xs text-muted-foreground flex items-center gap-1 mb-1 whitespace-nowrap">
+                <Percent className="w-3 h-3 text-emerald-500" /> vs. Average
+              </span>
+              <span className={`font-bold text-lg ${stats.vsAverage >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                {stats.vsAverage >= 0 ? "+" : ""}{stats.vsAverage.toFixed(1)}%
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Map Area & Floating Overlay Container */}
+      <div className="flex-1 min-h-0 relative rounded-lg overflow-hidden border border-border shadow-sm">
+        
+        {/* Full Width Map View */}
+        <div className="w-full h-full">
+          <MapContainer center={mapCenter} zoom={mapZoom} style={{ height: "100%", width: "100%", zIndex: 0 }}>
+            <MapView sites={scopeCenters} center={mapCenter} zoom={mapZoom} />
+            <ZoomWatcher onZoom={setLiveZoom} />
+
+            {/* Carto Positron Crisp Light Tile Layer (100% Free & Reliable) */}
+            <TileLayer
+              attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+              url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+              maxZoom={19}
+            />
+
+            {markerLayers}
           </MapContainer>
 
           {/* Floating Right-Side Layer Legend Box (collapsible) */}

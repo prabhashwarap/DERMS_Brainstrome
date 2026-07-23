@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Cloud, CloudSun, Sun, Thermometer } from "lucide-react";
 import {
   Area,
@@ -173,7 +174,10 @@ function WeatherCard({
 
 /* ------------------------------------------------------------------ */
 
-function FeederCard({ bundle }: { bundle: Bundle }) {
+// Neither of these cards reads `hoverTs`, but ContextPanel re-renders on every
+// chart mouse move to reposition the WeatherCard crosshair. memo keeps these two
+// (a 7-row grid and a bar) from re-rendering on every pointer move.
+const FeederCard = memo(function FeederCard({ bundle }: { bundle: Bundle }) {
   const f = bundle.feeder;
   const firmMW = capacityMW(f);
   const capStr = f.capacityMVA >= 1
@@ -245,11 +249,11 @@ function FeederCard({ bundle }: { bundle: Bundle }) {
       </CardContent>
     </Card>
   );
-}
+});
 
 /* ------------------------------------------------------------------ */
 
-function CapacityCard({ bundle }: { bundle: Bundle }) {
+const CapacityCard = memo(function CapacityCard({ bundle }: { bundle: Bundle }) {
   const firm = capacityMW(bundle.feeder);
   const expected = firm > 0 ? (bundle.kpis.peakMW / firm) * 100 : 0;
   const upper = firm > 0 ? (bundle.kpis.peakUpperMW / firm) * 100 : 0;
@@ -281,4 +285,4 @@ function CapacityCard({ bundle }: { bundle: Bundle }) {
       </CardContent>
     </Card>
   );
-}
+});

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppShell, type NavId } from "@/components/AppShell";
 import { ForecastToolbar } from "@/components/ForecastToolbar";
@@ -7,7 +7,12 @@ import { ForecastChart, type RangeKey } from "@/components/ForecastChart";
 import { ContextPanel } from "@/components/ContextPanel";
 import { ForecastTable } from "@/components/ForecastTable";
 import { ConfigPanel } from "@/components/ConfigPanel";
-import { ForecastPlus } from "@/components/ForecastPlus";
+// The Forecast+ map pulls in Leaflet/react-leaflet (~150 kB). It is a separate
+// tab, so load it on demand instead of shipping it in the initial bundle for
+// everyone who only opens the default forecasting view.
+const ForecastPlus = lazy(() =>
+  import("@/components/ForecastPlus").then((m) => ({ default: m.ForecastPlus }))
+);
 import { FEEDERS, type FeederId } from "@/pipeline/feeders";
 import { runForecast, type PredictionOverrides } from "@/pipeline/forecast";
 import { lastRunAtOrBefore, scheduleDailyRun } from "@/pipeline/scheduler";
@@ -57,7 +62,15 @@ export default function App() {
         onConfigToggle={() => setIsConfigOpen(true)}
       >
         {activeNav === "forecastPlus" ? (
-          <ForecastPlus />
+          <Suspense
+            fallback={
+              <div className="flex flex-1 items-center justify-center p-10 text-sm text-muted-foreground">
+                Loading grid map…
+              </div>
+            }
+          >
+            <ForecastPlus />
+          </Suspense>
         ) : (
           <main id="main" className="flex flex-col gap-4 p-4 lg:p-6">
           <ForecastToolbar

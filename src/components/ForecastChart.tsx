@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import {
   Area,
@@ -133,7 +133,7 @@ const fmtMW = (v: number) => {
   return v.toFixed(4);
 };
 
-export function ForecastChart({
+function ForecastChartInner({
   bundle,
   range,
   onRangeChange,
@@ -379,6 +379,15 @@ export function ForecastChart({
     </Card>
   );
 }
+
+/**
+ * Memoized: the main chart depends only on `bundle`, `range` and the baseline
+ * toggle. Hovering the chart updates `hoverTs` in App on every mouse move; that
+ * state is not a prop here, so memo keeps the (expensive) Recharts tree from
+ * reconciling on every pointer move. Recharts' own crosshair/tooltip still
+ * update internally without a React re-render of this component.
+ */
+export const ForecastChart = memo(ForecastChartInner);
 
 function Swatch({ color, dashed }: { color: string; dashed?: boolean }) {
   return (

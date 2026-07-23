@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import {
   Zap,
   Building2,
@@ -171,7 +171,16 @@ export function NodeDetailPanel({ node, onClose, onFilterToNode }: NodeDetailPan
   const [showBaseline, setShowBaseline] = useState(false);
   const [hoverTs, setHoverTs] = useState<number | null>(null);
 
-  const bundle = useMemo(() => createNodeBundle(node, Date.now()), [node]);
+  // The forecast pipeline (a ridge fit over ~a year of 15-minute readings) costs
+  // tens of ms. Running it inline on the click that opens the panel blocks the
+  // main thread before the panel can render. Defer it one macrotask so the panel
+  // paints immediately with a skeleton, then swaps in the charts a frame later.
+  const [bundle, setBundle] = useState<Bundle | null>(null);
+  useEffect(() => {
+    setBundle(null);
+    const id = setTimeout(() => setBundle(createNodeBundle(node, Date.now())), 0);
+    return () => clearTimeout(id);
+  }, [node]);
 
   const typeMeta = TYPE_CONFIG[node.type] || TYPE_CONFIG.feeder;
   const TypeIcon = typeMeta.icon;
@@ -227,36 +236,58 @@ export function NodeDetailPanel({ node, onClose, onFilterToNode }: NodeDetailPan
 
       {/* Main Content Area - Renders standard Forecasting Tab components directly */}
       <div className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-4">
-        
-        {/* KPI Executive Summary Row */}
-        <KpiRow bundle={bundle} />
+        {bundle === null ? (
+          <NodeForecastSkeleton />
+        ) : (
+          <>
+            {/* KPI Executive Summary Row */}
+            <KpiRow bundle={bundle} />
 
-        {/* Two-Column Grid Layout matching Forecasting Tab */}
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-          
-          {/* Main Left Column: ForecastChart & ForecastTable */}
-          <div className="flex min-w-0 flex-col gap-4 self-start">
-            <ForecastChart
-              bundle={bundle}
-              range={range}
-              onRangeChange={setRange}
-              showBaseline={showBaseline}
-              onShowBaselineChange={setShowBaseline}
-              onHover={setHoverTs}
-              heightClassName="h-[240px] sm:h-[280px]"
-            />
-            <ForecastTable bundle={bundle} />
-          </div>
+            {/* Two-Column Grid Layout matching Forecasting Tab */}
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+              {/* Main Left Column: ForecastChart & ForecastTable */}
+              <div className="flex min-w-0 flex-col gap-4 self-start">
+                <ForecastChart
+                  bundle={bundle}
+                  range={range}
+                  onRangeChange={setRange}
+                  showBaseline={showBaseline}
+                  onShowBaselineChange={setShowBaseline}
+                  onHover={setHoverTs}
+                  heightClassName="h-[240px] sm:h-[280px]"
+                />
+                <ForecastTable bundle={bundle} />
+              </div>
 
-          {/* Context Right Column: ContextPanel */}
-          <ContextPanel bundle={bundle} hoverTs={hoverTs} />
+              {/* Context Right Column: ContextPanel */}
+              <ContextPanel bundle={bundle} hoverTs={hoverTs} />
+            </div>
 
-        </div>
-
-        {/* Full-width companion forecasts (collapsible) */}
-        <GenerationEvCharts bundle={bundle} />
-
+            {/* Full-width companion forecasts (collapsible) */}
+            <GenerationEvCharts bundle={bundle} />
+          </>
+        )}
       </div>
     </aside>
+  );
+}
+
+/** Lightweight placeholder shown while the deferred forecast pipeline runs. */
+function NodeForecastSkeleton() {
+  return (
+    <div className="animate-pulse space-y-4" aria-hidden>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="h-24 rounded-lg bg-muted" />
+        ))}
+      </div>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="space-y-4">
+          <div className="h-[300px] rounded-lg bg-muted" />
+          <div className="h-40 rounded-lg bg-muted" />
+        </div>
+        <div className="h-[300px] rounded-lg bg-muted" />
+      </div>
+    </div>
   );
 }

@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { ArrowDownRight, ArrowUpRight, Clock, Gauge, Minus, Zap } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -63,7 +64,9 @@ function Tile({ label, value, unit, icon, footnote, help }: TileProps) {
  * much, when, and how that compares to the day just gone. Everything is set in
  * tabular figures so the row does not reflow as values update.
  */
-export function KpiRow({ bundle }: { bundle: Bundle }) {
+// Depends only on `bundle`; memo keeps chart-hover re-renders of App from
+// cascading into the KPI tiles.
+export const KpiRow = memo(function KpiRow({ bundle }: { bundle: Bundle }) {
   const k = bundle.kpis;
   const peakDelta = k.prevPeakMW > 0 ? ((k.peakMW - k.prevPeakMW) / k.prevPeakMW) * 100 : 0;
   const energyDelta = k.prevEnergyMWh > 0 ? ((k.energyMWh - k.prevEnergyMWh) / k.prevEnergyMWh) * 100 : 0;
@@ -120,4 +123,4 @@ export function KpiRow({ bundle }: { bundle: Bundle }) {
       />
     </div>
   );
-}
+});

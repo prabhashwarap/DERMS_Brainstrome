@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { ChevronDown, Table2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatLKT, localParts } from "@/pipeline/calendar";
@@ -20,7 +20,9 @@ const fmtNum = (v: number) => {
   return v.toFixed(5);
 };
 
-export function ForecastTable({ bundle }: { bundle: Bundle }) {
+// Depends only on `bundle`; memo keeps chart-hover re-renders of App from
+// re-rendering the whole table on every mouse move.
+export const ForecastTable = memo(function ForecastTable({ bundle }: { bundle: Bundle }) {
   const hours: Array<{
     ts: number;
     expected: number;
@@ -133,4 +135,4 @@ export function ForecastTable({ bundle }: { bundle: Bundle }) {
       </CardContent>
     </Card>
   );
-}
+});
