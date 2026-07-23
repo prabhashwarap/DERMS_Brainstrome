@@ -148,7 +148,7 @@ function WeatherCard({
                   </div>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {formatLKT(b.ts)} — {label}, {Math.round(b.cloud * 100)}% cloud,{" "}
+                  {formatLKT(b.ts)} - {label}, {Math.round(b.cloud * 100)}% cloud,{" "}
                   {b.tempC.toFixed(1)} °C
                 </TooltipContent>
               </Tooltip>
@@ -170,7 +170,7 @@ function WeatherCard({
             </>
           ) : (
             <>
-              Temperature is the dominant driver here — cooling load tracks the afternoon and
+              Temperature is the dominant driver here - cooling load tracks the afternoon and
               evening. At{" "}
               <span className="tnum">
                 {Math.round(bundle.feeder.solarPenetration * 100)}%
@@ -198,8 +198,8 @@ function FeederCard({ bundle }: { bundle: Bundle }) {
     [
       "Expected shape",
       f.profile === "residential"
-        ? "Double hump — morning + evening peaks"
-        : "Duck curve — midday trough, steep evening ramp",
+        ? "Double hump - morning + evening peaks"
+        : "Duck curve - midday trough, steep evening ramp",
     ],
   ];
 

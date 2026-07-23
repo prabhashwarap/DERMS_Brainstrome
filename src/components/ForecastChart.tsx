@@ -144,7 +144,7 @@ export function ForecastChart({
       <div className="flex flex-wrap items-start justify-between gap-3 p-4 pb-2">
         <div>
           <h2 className="text-sm font-semibold tracking-tight">
-            Net load — actual and day-ahead forecast
+            Net load - actual and day-ahead forecast
           </h2>
           <p className="text-xs text-muted-foreground">
             {bundle.feeder.name} · 15-minute resolution · MW · Asia/Colombo

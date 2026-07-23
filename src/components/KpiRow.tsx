@@ -72,7 +72,7 @@ export function KpiRow({ bundle }: { bundle: Bundle }) {
         value={k.energyMWh.toFixed(1)}
         unit="MWh"
         icon={<Gauge className="h-4 w-4" />}
-        help="Area under the forecast curve — the volume to contract for the day. The range is the volume implied by the confidence band."
+        help="Area under the forecast curve - the volume to contract for the day. The range is the volume implied by the confidence band."
         footnote={
           <span className="tnum">
             95% range {k.energyLowerMWh.toFixed(1)} – {k.energyUpperMWh.toFixed(1)} MWh

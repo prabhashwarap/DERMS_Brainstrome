@@ -120,7 +120,7 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
                 </span>
               </TooltipTrigger>
               <TooltipContent side="right">
-                Part of the wider Oversight platform — outside the forecasting pilot.
+                Part of the wider Oversight platform - outside the forecasting pilot.
               </TooltipContent>
             </Tooltip>
           );
@@ -195,7 +195,7 @@ function TopBar({
               </Button>
             </span>
           </TooltipTrigger>
-          <TooltipContent>Alerting arrives after v1 — space reserved.</TooltipContent>
+          <TooltipContent>Alerting arrives after v1 - space reserved.</TooltipContent>
         </Tooltip>
 
         <Tooltip>
