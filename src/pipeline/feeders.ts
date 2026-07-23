@@ -288,7 +288,7 @@ export const FEEDERS: Record<FeederId, Feeder> = {
   },
 };
 
-export const FEEDER_LIST = Object.values(FEEDERS);
+export const FEEDER_LIST: Feeder[] = [FEEDERS.angulana, FEEDERS.katunayake];
 
 /** Firm capacity in MW. */
 export const capacityMW = (f: Feeder) => f.capacityMVA * f.powerFactor;

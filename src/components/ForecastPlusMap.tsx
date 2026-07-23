@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { NodeDetailPanel, lecoAccountNumber, type MapNodeDetails } from "./NodeDetailPanel";
 import { Badge } from "@/components/ui/badge";
+import { formatPower, formatEnergy } from "@/lib/utils";
 import {
   Zap,
   Cable,
@@ -198,7 +199,7 @@ const LECO_DATA: { branches: Branch[] } = {
           substationName: "Angulana Substation",
           feeders: [
             { id: "moratuwa_north_f1", name: "Rawatawatta", center: [6.7865, 79.8850] },
-            { id: "moratuwa_north_f2", name: "Angulana", center: [6.8020, 79.8770] },
+            { id: "angulana", name: "Velona / Angulana", center: [6.8020, 79.8770] },
           ],
         },
         {
@@ -292,7 +293,7 @@ const LECO_DATA: { branches: Branch[] } = {
           substationName: "Katunayake Substation",
           feeders: [
             { id: "seeduwa_f1", name: "Seeduwa", center: [7.1430, 79.8810] },
-            { id: "seeduwa_f2", name: "Katunayake", center: [7.1720, 79.8870] },
+            { id: "katunayake", name: "Seeduwa / Katunayake", center: [7.1720, 79.8870] },
           ],
         },
         {
@@ -383,6 +384,22 @@ const fallbackRoute = (sub: [number, number], t: [number, number]): Array<[numbe
 // Deterministic per-feeder forecast so aggregate stats are a real roll-up of
 // whatever is in scope (a single feeder, a CSC's feeders, a branch, or all).
 function feederMetrics(feederId: string): { peak: number; energy: number; peakHour: number; solar: number } {
+  if (feederId === "angulana" || feederId === "moratuwa_north_f2") {
+    // 13 MVA feeder · 0.95 PF · 0.52 load factor · 9% solar penetration
+    const peak = 13 * 0.95 * 0.52;
+    const energy = peak * 24 * 0.52;
+    const peakHour = 19;
+    const solar = peak * 0.09 * 5.5;
+    return { peak, energy, peakHour, solar };
+  }
+  if (feederId === "katunayake" || feederId === "seeduwa_f2") {
+    // 22 MVA feeder · 0.95 PF · 0.58 load factor · 34% solar penetration
+    const peak = 22 * 0.95 * 0.58;
+    const energy = peak * 24 * 0.58;
+    const peakHour = 18;
+    const solar = peak * 0.34 * 5.5;
+    return { peak, energy, peakHour, solar };
+  }
   const h = hashStr(feederId);
   const peak = 3.2 + (h % 40) / 10; // ~3.2-7.1 MW per feeder
   const loadFactor = 0.55 + ((h >> 3) % 26) / 100; // 0.55-0.80
@@ -1147,24 +1164,25 @@ export function ForecastPlusMap() {
       : 18;
     const scopeKey = `${branch}|${csc}|${feeder}`;
     const vsAverage = ((hashStr(scopeKey) % 120) / 10) - 4;
-    const fmtStat = (v: number) => {
-      const abs = Math.abs(v);
-      if (abs >= 10) return v.toFixed(1);
-      if (abs >= 1) return v.toFixed(2);
-      if (abs >= 0.01) return v.toFixed(3);
-      return v.toFixed(4);
-    };
+
+    const pFmt = formatPower(peak);
+    const eFmt = formatEnergy(energy);
+    const sFmt = formatEnergy(solar);
+
     return {
-      peakVal: fmtStat(peak),
-      energyVal: fmtStat(energy),
-      solarVal: fmtStat(solar),
+      peakVal: pFmt.value,
+      peakUnit: pFmt.unit,
+      energyVal: eFmt.value,
+      energyUnit: eFmt.unit,
+      solarVal: sFmt.value,
+      solarUnit: sFmt.unit,
       timeHour: peakHour,
       vsAverage,
       feederCount: scopeSites.length,
     };
   }, [scopeSites, branch, csc, feeder]);
 
-  const { peakVal, energyVal, solarVal, timeHour } = stats;
+  const { timeHour } = stats;
 
   const scopeLabel = useMemo(() => {
     const b = LECO_DATA.branches.find(x => x.id === branch);
@@ -1815,22 +1833,22 @@ export function ForecastPlusMap() {
               icon={<Zap className="w-3.5 h-3.5 text-primary" />}
               tint="bg-primary/10"
               label="Peak"
-              value={peakVal}
-              unit="MW"
+              value={stats.peakVal}
+              unit={stats.peakUnit}
             />
             <StatTile
               icon={<EnergyIcon className="w-3.5 h-3.5 text-amber-500" />}
               tint="bg-amber-500/10"
               label="Energy"
-              value={energyVal}
-              unit="MWh"
+              value={stats.energyVal}
+              unit={stats.energyUnit}
             />
             <StatTile
               icon={<Sun className="w-3.5 h-3.5 text-amber-500" />}
               tint="bg-amber-500/10"
               label="Solar"
-              value={solarVal}
-              unit="MWh"
+              value={stats.solarVal}
+              unit={stats.solarUnit}
             />
             <StatTile
               icon={<Clock className="w-3.5 h-3.5 text-blue-500" />}

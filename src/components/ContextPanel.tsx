@@ -15,7 +15,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { formatLKT, localParts } from "@/pipeline/calendar";
 import { capacityMW } from "@/pipeline/feeders";
 import type { Bundle } from "@/pipeline/forecast";
-import { cn } from "@/lib/utils";
+import { cn, formatPower, formatEnergy } from "@/lib/utils";
 
 /**
  * The grid path as an indented tree: Branch → CSC → Substation → Feeder →
@@ -64,13 +64,7 @@ function HierarchyTrail({ nodes }: { nodes: Array<{ type: string; name: string }
 }
 
 /** Adaptive power formatting by magnitude. */
-const mw = (v: number) => {
-  const abs = Math.abs(v);
-  if (abs >= 10) return v.toFixed(1);
-  if (abs >= 1) return v.toFixed(2);
-  if (abs >= 0.01) return v.toFixed(3);
-  return v.toFixed(4);
-};
+const mw = (v: number) => formatPower(v).full;
 
 interface Props {
   bundle: Bundle;
@@ -288,7 +282,7 @@ const FeederCard = memo(function FeederCard({ bundle }: { bundle: Bundle }) {
     <span key="mape" className="tnum text-emerald-600 dark:text-emerald-400 font-semibold">
       {bundle.accuracy.mape.toFixed(1)}% MAPE{" "}
       <span className="text-muted-foreground font-normal text-[11px]">
-        (MAE {mw(bundle.accuracy.maeMW)} MW)
+        (MAE {formatPower(bundle.accuracy.maeMW).full})
       </span>
     </span>,
   ]);
@@ -296,21 +290,21 @@ const FeederCard = memo(function FeederCard({ bundle }: { bundle: Bundle }) {
   rows.push([
     "Horizon Peak",
     <span key="peak" className="tnum font-medium">
-      {mw(bundle.kpis.peakMW)} MW at {formatLKT(bundle.kpis.peakAt)}
+      {formatPower(bundle.kpis.peakMW).full} at {formatLKT(bundle.kpis.peakAt)}
     </span>,
   ]);
 
   rows.push([
     "Horizon Min",
     <span key="min" className="tnum font-medium">
-      {mw(bundle.kpis.minMW)} MW at {formatLKT(bundle.kpis.minAt)}
+      {formatPower(bundle.kpis.minMW).full} at {formatLKT(bundle.kpis.minAt)}
     </span>,
   ]);
 
   rows.push([
     "24h Energy",
     <span key="energy" className="tnum font-medium">
-      {bundle.kpis.energyMWh.toFixed(1)} MWh
+      {formatEnergy(bundle.kpis.energyMWh).full}
     </span>,
   ]);
 

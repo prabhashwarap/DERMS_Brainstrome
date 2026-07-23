@@ -1,6 +1,6 @@
 # Code Map (graphify)
 
-_30 files · 91 exported symbols · regenerate with `npm run graphify`._
+_30 files · 93 exported symbols · regenerate with `npm run graphify`._
 
 Read this map to locate code, then open only the file(s) you need. Signatures are compact (params + annotated return type); tags like `[memo]` note wrappers.
 
@@ -94,6 +94,8 @@ Read this map to locate code, then open only the file(s) you need. Signatures ar
 
 ## src/lib/utils.ts
 - fn cn(...inputs: ClassValue[])
+- fn formatPower(valMW: number): { value: string; unit: string; full: string }
+- fn formatEnergy(valMWh: number): { value: string; unit: string; full: string }
 
 ## src/pipeline/calendar.ts
 - const LKT_OFFSET_MIN
@@ -122,7 +124,7 @@ Read this map to locate code, then open only the file(s) you need. Signatures ar
 - type FeederId
 - interface Feeder
 - const FEEDERS
-- const FEEDER_LIST  [values]
+- const FEEDER_LIST
 - fn capacityMW(f: Feeder)
 
 ## src/pipeline/forecast.ts

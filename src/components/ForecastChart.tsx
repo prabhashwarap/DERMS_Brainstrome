@@ -21,7 +21,7 @@ import { QUARTER_MS, formatLKT, localParts, startOfLocalDay } from "@/pipeline/c
 import { capacityMW } from "@/pipeline/feeders";
 import type { Bundle } from "@/pipeline/forecast";
 
-import { cn } from "@/lib/utils";
+import { cn, formatPower } from "@/lib/utils";
 
 export type RangeKey = "24h" | "7d" | "30d";
 
@@ -127,13 +127,8 @@ function makeTicks(from: number, to: number, stepHours: number): number[] {
   return ticks;
 }
 
-const fmtMW = (v: number) => {
-  const abs = Math.abs(v);
-  if (abs >= 10) return v.toFixed(1);
-  if (abs >= 1) return v.toFixed(2);
-  if (abs >= 0.01) return v.toFixed(3);
-  return v.toFixed(4);
-};
+/** Format power with adaptive precision according to magnitude. */
+const fmtMW = (v: number) => formatPower(v).value;
 
 const VARIANT_STYLES: Record<string, React.CSSProperties> = {
   load: {},
@@ -485,19 +480,19 @@ function ChartTooltip({
       </div>
       <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1.5 text-xs">
         {row.actual != null && (
-          <Row color="var(--viz-actual)" label="Actual" value={`${fmtMW(row.actual)} MW`} />
+          <Row color="var(--viz-actual)" label="Actual" value={formatPower(row.actual).full} />
         )}
         {row.expected != null && (
           <Row
             color="var(--viz-forecast)"
             label="Expected"
-            value={`${fmtMW(row.expected)} MW`}
+            value={formatPower(row.expected).full}
           />
         )}
         {row.band && row.band[0] !== row.band[1] && (
           <Row
             label="95% range"
-            value={`${fmtMW(row.band[0])} – ${fmtMW(row.band[1])} MW`}
+            value={`${formatPower(row.band[0]).full} – ${formatPower(row.band[1]).full}`}
             muted
           />
         )}
@@ -505,7 +500,7 @@ function ChartTooltip({
           <Row
             color="var(--viz-baseline)"
             label="Baseline"
-            value={`${fmtMW(row.baseline)} MW`}
+            value={formatPower(row.baseline).full}
           />
         )}
         {row.tempC != null && (
