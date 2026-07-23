@@ -528,6 +528,9 @@ export function ForecastPlusMap() {
   const [csc, setCsc] = useState("moratuwa_north");
   const [feeder, setFeeder] = useState("angulana");
   const [selectedNode, setSelectedNode] = useState<MapNodeDetails | null>(null);
+  // Id of the marker currently hovered. When set, every other node on the map
+  // dims to 50% so the hovered element (and its popup context) reads clearly.
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   // Advance Search States
   const [searchQuery, setSearchQuery] = useState("");
@@ -855,8 +858,9 @@ export function ForecastPlusMap() {
   const [legendOpen, setLegendOpen] = useState(false);
 
   // Live map zoom level, updated as the user scrolls/zooms (not just on filter
-  // changes). Seeded to the initial filter-derived zoom below (zoom level 14 for CSC view).
-  const [liveZoom, setLiveZoom] = useState(14);
+  // changes). Seeded to the default feeder view's zoom (Velona / Angulana) so
+  // the initial level of detail matches the framed feeder.
+  const [liveZoom, setLiveZoom] = useState(16);
 
   const availableCscs = useMemo(() => {
     if (branch === "all") return [];
@@ -910,8 +914,9 @@ export function ForecastPlusMap() {
     return 11;
   }, [branch, csc, feeder]);
 
-  // Org-hierarchy markers scoped to the current drill-down so the map stays readable:
-  // all Branch HQs at the top level, then CSC HQs within a branch, then Feeders within a CSC.
+  // Org-hierarchy HQ markers scoped to the current drill-down so the map stays
+  // readable: all Branch HQs at the top level, then CSC HQs within a branch.
+  // Feeders are rendered per in-scope site (see scopeSites), not here.
   const orgMarkers = useMemo(() => {
     const selectedBranch = LECO_DATA.branches.find(b => b.id === branch);
     const branchHqs = selectedBranch ? [selectedBranch] : LECO_DATA.branches;
@@ -920,19 +925,7 @@ export function ForecastPlusMap() {
       ? (csc === "all" ? selectedBranch.cscs : selectedBranch.cscs.filter(c => c.id === csc))
       : [];
 
-    const selectedCsc = selectedBranch?.cscs.find(c => c.id === csc);
-    const feeders = selectedCsc
-      ? selectedCsc.feeders.map(f => ({
-          id: f.id,
-          name: f.name,
-          csc: selectedCsc.name,
-          substationName: selectedCsc.substationName,
-          branchName: selectedBranch?.name,
-          center: feederCenter(selectedCsc, f),
-        }))
-      : [];
-
-    return { branchHqs, cscHqs, feeders };
+    return { branchHqs, cscHqs };
   }, [branch, csc]);
 
   // One grid "site" per feeder in scope, positioned at that feeder's location.
@@ -1235,7 +1228,17 @@ export function ForecastPlusMap() {
   ];
 
   const markerLayers = useMemo(
-    () => (
+    () => {
+      // Full opacity for the hovered node (or when nothing is hovered); every
+      // other node dims to 50%. `hoverProps` wires a marker into this state.
+      const opacityFor = (id: string) => (hoveredId && hoveredId !== id ? 0.5 : 1);
+      const lineOpacity = (base: number, id?: string) =>
+        hoveredId && hoveredId !== id ? base * 0.5 : base;
+      const hoverProps = (id: string) => ({
+        mouseover: () => setHoveredId(id),
+        mouseout: () => setHoveredId((cur) => (cur === id ? null : cur)),
+      });
+      return (
       <>
         {/* LECO Org Hierarchy: Branch HQ */}
         {layers.branchHq && orgMarkers.branchHqs.map(b => {
@@ -1254,7 +1257,8 @@ export function ForecastPlusMap() {
               key={`branch-${b.id}`}
               position={b.center}
               icon={branchHqIcon}
-              eventHandlers={{ click: () => setSelectedNode(nodeData) }}
+              opacity={opacityFor(b.id)}
+              eventHandlers={{ click: () => setSelectedNode(nodeData), ...hoverProps(b.id) }}
             >
               <Popup>
                 <div className="text-xs font-semibold">{b.name} Branch HQ</div>
@@ -1289,7 +1293,8 @@ export function ForecastPlusMap() {
               key={`csc-${c.id}`}
               position={c.center}
               icon={cscHqIcon}
-              eventHandlers={{ click: () => setSelectedNode(nodeData) }}
+              opacity={opacityFor(c.id)}
+              eventHandlers={{ click: () => setSelectedNode(nodeData), ...hoverProps(c.id) }}
             >
               <Popup>
                 <div className="text-xs font-semibold">{c.name} CSC HQ</div>
@@ -1306,54 +1311,60 @@ export function ForecastPlusMap() {
           );
         })}
 
-        {/* LECO Org Hierarchy: Feeders */}
-        {layers.feeder && orgMarkers.feeders.map(f => {
+        {/* LECO Org Hierarchy: Feeders — one per feeder in the active scope
+            (a single feeder, a CSC's feeders, a whole branch, or all), placed
+            just off its substation pin so both stay legible. */}
+        {layers.feeder && scopeSites.map(s => {
+          const m = feederMetrics(s.feederId);
+          const feederNodeId = `feeder-${s.feederId}`;
+          const pos: [number, number] = [s.center[0] + 0.0006, s.center[1]];
           const nodeData: MapNodeDetails = {
-            id: f.id,
-            name: `${f.name} Feeder`,
+            id: feederNodeId,
+            name: `${s.feederName} Feeder`,
             type: "feeder",
             typeName: "Feeder Line",
-            branchName: f.branchName ? `${f.branchName} Branch` : undefined,
-            cscName: f.csc ? `${f.csc} CSC` : undefined,
-            substationName: f.substationName,
-            feederId: f.id,
-            feederName: f.name,
-            center: f.center,
+            branchName: `${s.branchName} Branch`,
+            cscName: `${s.cscName} CSC`,
+            substationName: s.substationName,
+            feederId: s.feederId,
+            feederName: s.feederName,
+            center: pos,
             status: "Normal"
           };
           return (
             <Marker
-              key={`feeder-${f.id}`}
-              position={f.center}
+              key={feederNodeId}
+              position={pos}
               icon={feederIcon}
-              eventHandlers={{ click: () => setSelectedNode(nodeData) }}
+              opacity={opacityFor(feederNodeId)}
+              eventHandlers={{ click: () => setSelectedNode(nodeData), ...hoverProps(feederNodeId) }}
             >
               <Popup>
                 <div className="flex flex-col gap-1 min-w-[210px] p-0.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-foreground">{f.name} Feeder</span>
+                    <span className="text-xs font-bold text-foreground">{s.feederName} Feeder</span>
                     <Badge variant="outline" className="text-[9px] font-semibold py-0 px-1 text-rose-600 border-rose-200 bg-rose-50">11kV Feeder</Badge>
                   </div>
                   <div className="text-[11px] text-muted-foreground font-medium">
-                    {f.csc} CSC &middot; {f.substationName}
+                    {s.cscName} CSC &middot; {s.substationName}
                   </div>
-                  
+
                   <div className="grid grid-cols-2 gap-1.5 my-1.5 bg-muted/40 p-1.5 rounded-md border border-border/50 text-[10px]">
                     <div>
                       <span className="text-muted-foreground block">Firm Capacity:</span>
-                      <span className="font-semibold text-foreground">{(feederMetrics(f.id).peak * 1.8).toFixed(1)} MW</span>
+                      <span className="font-semibold text-foreground">{(m.peak * 1.8).toFixed(1)} MW</span>
                     </div>
                     <div>
                       <span className="text-muted-foreground block">Forecast Peak:</span>
-                      <span className="font-semibold text-foreground">{feederMetrics(f.id).peak.toFixed(2)} MW</span>
+                      <span className="font-semibold text-foreground">{m.peak.toFixed(2)} MW</span>
                     </div>
                     <div>
                       <span className="text-muted-foreground block">Peak Time:</span>
-                      <span className="font-semibold text-foreground">{feederMetrics(f.id).peakHour}:00 LKT</span>
+                      <span className="font-semibold text-foreground">{m.peakHour}:00 LKT</span>
                     </div>
                     <div>
                       <span className="text-muted-foreground block">Rooftop Solar:</span>
-                      <span className="font-semibold text-amber-600">{feederMetrics(f.id).solar.toFixed(1)} MWh/d</span>
+                      <span className="font-semibold text-amber-600">{m.solar.toFixed(1)} MWh/d</span>
                     </div>
                   </div>
 
@@ -1379,7 +1390,7 @@ export function ForecastPlusMap() {
               <Polyline
                 key={key}
                 positions={path}
-                pathOptions={{ color: '#0284c7', weight: 3.5, opacity: 0.9 }}
+                pathOptions={{ color: '#0284c7', weight: 3.5, opacity: lineOpacity(0.9, `feeder-${site.feederId}`) }}
                 eventHandlers={{
                   click: () => setSelectedNode({
                     id: `feeder-${site.feederId}`,
@@ -1403,7 +1414,7 @@ export function ForecastPlusMap() {
           <Polyline
             key={`drop-${c.id}`}
             positions={[c.pos, c.roadPoint]}
-            pathOptions={{ color: '#38bdf8', weight: 1.5, opacity: 0.7, dashArray: '3 3' }}
+            pathOptions={{ color: '#38bdf8', weight: 1.5, opacity: lineOpacity(0.7, c.id), dashArray: '3 3' }}
           />
         ))}
 
@@ -1426,7 +1437,8 @@ export function ForecastPlusMap() {
               key={`sub-${site.feederId}`}
               position={site.substation}
               icon={substationIcon}
-              eventHandlers={{ click: () => setSelectedNode(nodeData) }}
+              opacity={opacityFor(`sub-${site.feederId}`)}
+              eventHandlers={{ click: () => setSelectedNode(nodeData), ...hoverProps(`sub-${site.feederId}`) }}
             >
               <Popup>
                 <div className="text-xs font-semibold">{site.substationName}</div>
@@ -1467,7 +1479,8 @@ export function ForecastPlusMap() {
                 key={t.id}
                 position={t.pos}
                 icon={transformerIcon}
-                eventHandlers={{ click: () => setSelectedNode(nodeData) }}
+                opacity={opacityFor(t.id)}
+                eventHandlers={{ click: () => setSelectedNode(nodeData), ...hoverProps(t.id) }}
               >
                 <Popup>
                   <div className="text-xs font-semibold">{t.name}</div>
@@ -1560,11 +1573,11 @@ export function ForecastPlusMap() {
           return (
             <React.Fragment key={c.id}>
               {layers.meterEndpoint && (
-                <CircleMarker 
-                  center={c.pos} 
-                  radius={4.5} 
-                  pathOptions={{ color: '#ffffff', fillColor: '#0f172a', fillOpacity: 1, weight: 1.5 }}
-                  eventHandlers={{ click: () => setSelectedNode(meterNode) }}
+                <CircleMarker
+                  center={c.pos}
+                  radius={4.5}
+                  pathOptions={{ color: '#ffffff', fillColor: '#0f172a', fillOpacity: opacityFor(c.id), opacity: opacityFor(c.id), weight: 1.5 }}
+                  eventHandlers={{ click: () => setSelectedNode(meterNode), ...hoverProps(c.id) }}
                 >
                   <Popup>
                     <div className="text-xs font-semibold">Meter Endpoint</div>
@@ -1585,7 +1598,8 @@ export function ForecastPlusMap() {
                 <Marker
                   position={[c.pos[0] + 0.00008, c.pos[1] + 0.00008]}
                   icon={distributedSolarIcon}
-                  eventHandlers={{ click: () => setSelectedNode(solarNode) }}
+                  opacity={opacityFor(solarNode.id)}
+                  eventHandlers={{ click: () => setSelectedNode(solarNode), ...hoverProps(solarNode.id) }}
                 >
                   <Popup>
                     <div className="text-xs font-semibold">Distributed Solar</div>
@@ -1606,7 +1620,8 @@ export function ForecastPlusMap() {
                 <Marker
                   position={[c.pos[0] + 0.00008, c.pos[1] + 0.00008]}
                   icon={evseIcon}
-                  eventHandlers={{ click: () => setSelectedNode(evNode) }}
+                  opacity={opacityFor(evNode.id)}
+                  eventHandlers={{ click: () => setSelectedNode(evNode), ...hoverProps(evNode.id) }}
                 >
                   <Popup>
                     <div className="text-xs font-semibold">EVSE Charging Station</div>
@@ -1627,7 +1642,8 @@ export function ForecastPlusMap() {
                 <Marker
                   position={[c.pos[0] + 0.00008, c.pos[1] + 0.00008]}
                   icon={distributedBatteryIcon}
-                  eventHandlers={{ click: () => setSelectedNode(batteryNode) }}
+                  opacity={opacityFor(batteryNode.id)}
+                  eventHandlers={{ click: () => setSelectedNode(batteryNode), ...hoverProps(batteryNode.id) }}
                 >
                   <Popup>
                     <div className="text-xs font-semibold">Distributed Battery Storage</div>
@@ -1646,8 +1662,9 @@ export function ForecastPlusMap() {
           );
         })}
       </>
-    ),
-    [layers, orgMarkers, baseGrid, roadRoutes, consumers]
+      );
+    },
+    [layers, orgMarkers, scopeSites, baseGrid, roadRoutes, consumers, hoveredId]
   );
 
   return (
