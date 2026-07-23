@@ -6,7 +6,6 @@ import { KpiRow } from "@/components/KpiRow";
 import { ForecastChart, type RangeKey } from "@/components/ForecastChart";
 import { ContextPanel } from "@/components/ContextPanel";
 import { ForecastTable } from "@/components/ForecastTable";
-import { GenerationEvCharts } from "@/components/GenerationEvCharts";
 import { ConfigPanel } from "@/components/ConfigPanel";
 // The Forecast+ map pulls in Leaflet/react-leaflet (~150 kB). It is a separate
 // tab, so load it on demand instead of shipping it in the initial bundle for
@@ -94,7 +93,6 @@ export default function App() {
                 onShowBaselineChange={setShowBaseline}
                 onHover={setHoverTs}
               />
-              <GenerationEvCharts bundle={bundle} />
               <ForecastTable bundle={bundle} />
             </div>
 
