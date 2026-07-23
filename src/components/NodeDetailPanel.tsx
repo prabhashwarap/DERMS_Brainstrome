@@ -428,7 +428,7 @@ export function NodeDetailPanel({ node, onClose, onFilterToNode }: NodeDetailPan
                   heightClassName="h-[240px] sm:h-[280px]"
                 />
                 <GenerationEvCharts bundle={bundle} />
-                <ForecastTable bundle={bundle} />
+                <ForecastTable bundle={bundle} showGeneration />
               </div>
 
               {/* Context Right Column: ContextPanel */}

@@ -31,7 +31,7 @@ Read this map to locate code, then open only the file(s) you need. Signatures ar
 - ForecastPlusMap()
 
 ## src/components/ForecastTable.tsx
-- ForecastTable({ bundle }: { bundle: Bundle })  [memo]
+- ForecastTable({ bundle, showGeneration = false, }: { bundle: Bundle; showGeneration?: boolean; })  [memo]
 
 ## src/components/ForecastToolbar.tsx
 - ForecastToolbar({ feederId, onFeederChange, generatedAt }: Props)

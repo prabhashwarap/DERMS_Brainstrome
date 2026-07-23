@@ -22,7 +22,13 @@ const fmtNum = (v: number) => {
 
 // Depends only on `bundle`; memo keeps chart-hover re-renders of App from
 // re-rendering the whole table on every mouse move.
-export const ForecastTable = memo(function ForecastTable({ bundle }: { bundle: Bundle }) {
+export const ForecastTable = memo(function ForecastTable({
+  bundle,
+  showGeneration = false,
+}: {
+  bundle: Bundle;
+  showGeneration?: boolean;
+}) {
   const hours: Array<{
     ts: number;
     expected: number;
@@ -63,7 +69,9 @@ export const ForecastTable = memo(function ForecastTable({ bundle }: { bundle: B
             Hourly forecast table · {formatLKT(bundle.horizonStart, { date: true, time: false })}
           </span>
           <span className="block text-xs text-muted-foreground">
-            Hourly load mean, generation forecast, P95 bounds, and energy totals.
+            {showGeneration
+              ? "Hourly load mean, generation forecast, P95 bounds, and energy totals."
+              : "Hourly load mean, P95 bounds, and energy totals."}
           </span>
         </span>
         <ChevronDown
@@ -74,9 +82,10 @@ export const ForecastTable = memo(function ForecastTable({ bundle }: { bundle: B
       </button>
       <CardContent hidden={!open}>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[600px] text-xs">
+          <table className={`w-full text-xs ${showGeneration ? "min-w-[600px]" : "min-w-[520px]"}`}>
             <caption className="sr-only">
-              Hourly day-ahead load forecast for {bundle.feeder.name} with generation, confidence bounds, and
+              Hourly day-ahead load forecast for {bundle.feeder.name}{" "}
+              {showGeneration ? "with generation, confidence bounds, and" : "with confidence bounds and"}{" "}
               forecast temperature.
             </caption>
             <thead>
@@ -85,7 +94,9 @@ export const ForecastTable = memo(function ForecastTable({ bundle }: { bundle: B
                 <th scope="col" className="py-2 pr-3 text-right font-medium">Expected MW</th>
                 <th scope="col" className="py-2 pr-3 text-right font-medium">Lower MW</th>
                 <th scope="col" className="py-2 pr-3 text-right font-medium">Upper MW</th>
-                <th scope="col" className="py-2 pr-3 text-right font-medium">Generation MW</th>
+                {showGeneration && (
+                  <th scope="col" className="py-2 pr-3 text-right font-medium">Generation MW</th>
+                )}
                 <th scope="col" className="py-2 pr-3 text-right font-medium">Energy MWh</th>
                 <th scope="col" className="py-2 text-right font-medium">Temp °C</th>
               </tr>
@@ -115,9 +126,11 @@ export const ForecastTable = memo(function ForecastTable({ bundle }: { bundle: B
                     <td className="py-1.5 pr-3 text-right text-muted-foreground">
                       {fmtNum(h.upper)}
                     </td>
-                    <td className="py-1.5 pr-3 text-right text-amber-600/90 dark:text-amber-400/90 font-medium">
-                      {fmtNum(h.generation)}
-                    </td>
+                    {showGeneration && (
+                      <td className="py-1.5 pr-3 text-right text-amber-600/90 dark:text-amber-400/90 font-medium">
+                        {fmtNum(h.generation)}
+                      </td>
+                    )}
                     <td className="py-1.5 pr-3 text-right">{fmtNum(h.energy)}</td>
                     <td className="py-1.5 text-right text-muted-foreground">
                       {h.tempC.toFixed(1)}
@@ -132,9 +145,11 @@ export const ForecastTable = memo(function ForecastTable({ bundle }: { bundle: B
                 <td className="py-2 pr-3 text-right">{fmtNum(bundle.kpis.peakMW)} peak</td>
                 <td className="py-2 pr-3" />
                 <td className="py-2 pr-3" />
-                <td className="tnum py-2 pr-3 text-right text-amber-600/90 dark:text-amber-400/90">
-                  {fmtNum(bundle.kpis.solarEnergyMWh)} MWh
-                </td>
+                {showGeneration && (
+                  <td className="tnum py-2 pr-3 text-right text-amber-600/90 dark:text-amber-400/90">
+                    {fmtNum(bundle.kpis.solarEnergyMWh)} MWh
+                  </td>
+                )}
                 <td className="tnum py-2 pr-3 text-right">{fmtNum(bundle.kpis.energyMWh)}</td>
                 <td className="py-2" />
               </tr>
