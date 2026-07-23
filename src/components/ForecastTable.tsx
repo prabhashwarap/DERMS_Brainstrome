@@ -12,6 +12,14 @@ import type { Bundle } from "@/pipeline/forecast";
  * and for anyone whose colour vision the palette can't fully serve. Aggregated
  * to the hour, which is the granularity purchase blocks are actually written in.
  */
+const fmtNum = (v: number) => {
+  const abs = Math.abs(v);
+  if (abs >= 10) return v.toFixed(2);
+  if (abs >= 1) return v.toFixed(3);
+  if (abs >= 0.01) return v.toFixed(4);
+  return v.toFixed(5);
+};
+
 export function ForecastTable({ bundle }: { bundle: Bundle }) {
   const hours: Array<{
     ts: number;
@@ -96,14 +104,14 @@ export function ForecastTable({ bundle }: { bundle: Bundle }) {
                         </span>
                       )}
                     </th>
-                    <td className="py-1.5 pr-3 text-right">{h.expected.toFixed(2)}</td>
+                    <td className="py-1.5 pr-3 text-right">{fmtNum(h.expected)}</td>
                     <td className="py-1.5 pr-3 text-right text-muted-foreground">
-                      {h.lower.toFixed(2)}
+                      {fmtNum(h.lower)}
                     </td>
                     <td className="py-1.5 pr-3 text-right text-muted-foreground">
-                      {h.upper.toFixed(2)}
+                      {fmtNum(h.upper)}
                     </td>
-                    <td className="py-1.5 pr-3 text-right">{h.energy.toFixed(2)}</td>
+                    <td className="py-1.5 pr-3 text-right">{fmtNum(h.energy)}</td>
                     <td className="py-1.5 text-right text-muted-foreground">
                       {h.tempC.toFixed(1)}
                     </td>
@@ -114,10 +122,10 @@ export function ForecastTable({ bundle }: { bundle: Bundle }) {
             <tfoot>
               <tr className="border-t border-border font-medium">
                 <th scope="row" className="py-2 pr-3 text-left">Total</th>
-                <td className="py-2 pr-3 text-right">{bundle.kpis.peakMW.toFixed(2)} peak</td>
+                <td className="py-2 pr-3 text-right">{fmtNum(bundle.kpis.peakMW)} peak</td>
                 <td className="py-2 pr-3" />
                 <td className="py-2 pr-3" />
-                <td className="tnum py-2 pr-3 text-right">{bundle.kpis.energyMWh.toFixed(2)}</td>
+                <td className="tnum py-2 pr-3 text-right">{fmtNum(bundle.kpis.energyMWh)}</td>
                 <td className="py-2" />
               </tr>
             </tfoot>

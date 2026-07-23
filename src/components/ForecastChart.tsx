@@ -20,6 +20,8 @@ import { QUARTER_MS, formatLKT, localParts, startOfLocalDay } from "@/pipeline/c
 import { capacityMW } from "@/pipeline/feeders";
 import type { Bundle } from "@/pipeline/forecast";
 
+import { cn } from "@/lib/utils";
+
 export type RangeKey = "24h" | "7d" | "30d";
 
 const RANGES: Record<RangeKey, { days: number; label: string; bucketMs: number }> = {
@@ -47,6 +49,9 @@ interface Props {
   showBaseline: boolean;
   onShowBaselineChange: (v: boolean) => void;
   onHover: (ts: number | null) => void;
+  className?: string;
+  /** Optional override for the chart plot height (Tailwind height classes). */
+  heightClassName?: string;
 }
 
 export function buildChartRows(bundle: Bundle, range: RangeKey): ChartRow[] {
@@ -109,6 +114,14 @@ function makeTicks(from: number, to: number, stepHours: number): number[] {
   return ticks;
 }
 
+const fmtMW = (v: number) => {
+  const abs = Math.abs(v);
+  if (abs >= 10) return v.toFixed(1);
+  if (abs >= 1) return v.toFixed(2);
+  if (abs >= 0.01) return v.toFixed(3);
+  return v.toFixed(4);
+};
+
 export function ForecastChart({
   bundle,
   range,
@@ -116,6 +129,8 @@ export function ForecastChart({
   showBaseline,
   onShowBaselineChange,
   onHover,
+  className,
+  heightClassName = "h-[360px] sm:h-[440px] lg:h-[480px]",
 }: Props) {
   const rows = useMemo(() => buildChartRows(bundle, range), [bundle, range]);
 
@@ -130,8 +145,21 @@ export function ForecastChart({
   const peakNearRightEdge =
     (bundle.kpis.peakAt - domain[0]) / (domain[1] - domain[0]) > 0.86;
   const firm = capacityMW(bundle.feeder);
-  const yMax = Math.ceil(maxValue * 1.08);
-  const showCapacity = firm <= yMax * 1.02;
+
+  let yMax: number;
+  if (maxValue <= 0) {
+    yMax = 1;
+  } else if (maxValue >= 10) {
+    yMax = Math.ceil(maxValue * 1.08);
+  } else if (maxValue >= 1) {
+    yMax = Number((maxValue * 1.12).toFixed(1));
+  } else if (maxValue >= 0.01) {
+    yMax = Number((maxValue * 1.15).toFixed(3));
+  } else {
+    yMax = Number((maxValue * 1.15).toFixed(4));
+  }
+
+  const showCapacity = firm > 0 && firm <= yMax * 1.05;
 
   const tickFormat = (ts: number) => {
     const p = localParts(ts);
@@ -152,9 +180,9 @@ export function ForecastChart({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+          <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground select-none">
             <Switch checked={showBaseline} onCheckedChange={onShowBaselineChange} />
-            Similar-day baseline
+            Show similar-day baseline
           </label>
           <Tabs value={range} onValueChange={(v) => onRangeChange(v as RangeKey)}>
             <TabsList>
@@ -170,9 +198,7 @@ export function ForecastChart({
 
       <Legend showBaseline={showBaseline} />
 
-      {/* Explicit height: the canvas is sized for the data (a 15-minute series
-          needs vertical room to resolve), not stretched to match a neighbour. */}
-      <div className="h-[520px] px-1 pb-3 pr-4">
+      <div className={cn(heightClassName, "w-full px-1 pb-3 pr-4", className)}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart
             data={rows}
@@ -211,7 +237,7 @@ export function ForecastChart({
               tick={{ fill: "var(--viz-axis)", fontSize: 11 }}
               tickLine={false}
               axisLine={false}
-              tickFormatter={(v: number) => `${v.toFixed(0)}`}
+              tickFormatter={(v: number) => fmtMW(v)}
             />
 
             {/* 95 % prediction interval. Low alpha so gridlines and the expected
@@ -249,6 +275,7 @@ export function ForecastChart({
               isAnimationActive={false}
               activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--viz-surface)" }}
             />
+
             <Line
               dataKey="expected"
               type="monotone"
@@ -267,7 +294,7 @@ export function ForecastChart({
                 stroke="var(--viz-divider)"
                 strokeDasharray="2 6"
                 label={{
-                  value: `Firm capacity ${firm.toFixed(1)} MW`,
+                  value: `Firm capacity ${fmtMW(firm)} MW`,
                   position: "insideTopRight",
                   fill: "var(--viz-axis)",
                   fontSize: 10,
@@ -280,8 +307,6 @@ export function ForecastChart({
               stroke="var(--viz-divider)"
               strokeDasharray="4 4"
               label={{
-                // On the 30-day view the horizon is a sliver, so the label sits
-                // on the history side of the divider instead of overflowing.
                 value: range === "30d" ? "← history | forecast" : "Forecast horizon →",
                 position: range === "30d" ? "insideTopRight" : "insideTopLeft",
                 fill: "var(--viz-axis)",
@@ -300,7 +325,7 @@ export function ForecastChart({
               stroke="var(--viz-surface)"
               strokeWidth={2}
               label={{
-                value: `Peak ${bundle.kpis.peakMW.toFixed(1)} MW · ${formatLKT(bundle.kpis.peakAt)}`,
+                value: `Peak ${fmtMW(bundle.kpis.peakMW)} MW · ${formatLKT(bundle.kpis.peakAt)}`,
                 // Flip the label inwards near the right edge so it never clips.
                 position: peakNearRightEdge ? "left" : "top",
                 fill: "hsl(var(--foreground))",
@@ -400,19 +425,19 @@ function ChartTooltip({
       </div>
       <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1.5 text-xs">
         {row.actual != null && (
-          <Row color="var(--viz-actual)" label="Actual" value={`${row.actual.toFixed(2)} MW`} />
+          <Row color="var(--viz-actual)" label="Actual" value={`${fmtMW(row.actual)} MW`} />
         )}
         {row.expected != null && (
           <Row
             color="var(--viz-forecast)"
             label="Expected"
-            value={`${row.expected.toFixed(2)} MW`}
+            value={`${fmtMW(row.expected)} MW`}
           />
         )}
         {row.band && row.band[0] !== row.band[1] && (
           <Row
             label="95% range"
-            value={`${row.band[0].toFixed(2)} – ${row.band[1].toFixed(2)} MW`}
+            value={`${fmtMW(row.band[0])} – ${fmtMW(row.band[1])} MW`}
             muted
           />
         )}
@@ -420,7 +445,7 @@ function ChartTooltip({
           <Row
             color="var(--viz-baseline)"
             label="Baseline"
-            value={`${row.baseline.toFixed(2)} MW`}
+            value={`${fmtMW(row.baseline)} MW`}
           />
         )}
         {row.tempC != null && (

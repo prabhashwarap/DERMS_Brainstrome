@@ -15,8 +15,14 @@ import { formatLKT, localParts } from "@/pipeline/calendar";
 import { capacityMW } from "@/pipeline/feeders";
 import type { Bundle } from "@/pipeline/forecast";
 
-/** One decimal place — sensor precision does not justify more. */
-const mw = (v: number) => v.toFixed(1);
+/** Adaptive power formatting by magnitude. */
+const mw = (v: number) => {
+  const abs = Math.abs(v);
+  if (abs >= 10) return v.toFixed(1);
+  if (abs >= 1) return v.toFixed(2);
+  if (abs >= 0.01) return v.toFixed(3);
+  return v.toFixed(4);
+};
 
 interface Props {
   bundle: Bundle;
@@ -190,30 +196,70 @@ function WeatherCard({
 
 function FeederCard({ bundle }: { bundle: Bundle }) {
   const f = bundle.feeder;
-  const rows: Array<[string, string]> = [
-    ["Substation", f.substation],
-    ["Transformer capacity", `${f.capacityMVA} MVA`],
-    ["Load mix", f.mix],
-    ["Rooftop solar", `~${Math.round(f.solarPenetration * 100)}% penetration`],
+  const firmMW = capacityMW(f);
+  const capStr = f.capacityMVA >= 1
+    ? `${f.capacityMVA.toFixed(1)} MVA`
+    : `${(f.capacityMVA * 1000).toFixed(0)} kVA`;
+  const solarMW = (firmMW * f.solarPenetration).toFixed(2);
+
+  const rows: Array<[string, React.ReactNode]> = [
+    ["Substation & Feeder", `${f.substation} · ${f.shortName}`],
+    ["Rated / Firm Capacity", `${capStr} (${firmMW.toFixed(1)} MW @ ${f.powerFactor} PF)`],
     [
-      "Expected shape",
-      f.profile === "residential"
-        ? "Double hump - morning + evening peaks"
-        : "Duck curve - midday trough, steep evening ramp",
+      "Model Accuracy (28d)",
+      <span key="mape" className="tnum text-emerald-600 dark:text-emerald-400 font-semibold">
+        {bundle.accuracy.mape.toFixed(1)}% MAPE{" "}
+        <span className="text-muted-foreground font-normal text-[11px]">
+          (MAE {mw(bundle.accuracy.maeMW)} MW)
+        </span>
+      </span>,
+    ],
+    [
+      "Forecast Horizon Peak",
+      <span key="peak" className="tnum font-medium">
+        {mw(bundle.kpis.peakMW)} MW at {formatLKT(bundle.kpis.peakAt)}
+      </span>,
+    ],
+    [
+      "Forecast Min (Trough)",
+      <span key="min" className="tnum font-medium">
+        {mw(bundle.kpis.minMW)} MW at {formatLKT(bundle.kpis.minAt)}
+      </span>,
+    ],
+    [
+      "24h Energy Volume",
+      <span key="energy" className="tnum font-medium">
+        {bundle.kpis.energyMWh.toFixed(1)} MWh
+      </span>,
+    ],
+    [
+      "Rooftop Solar Impact",
+      <span key="solar" className="tnum font-medium">
+        ~{Math.round(f.solarPenetration * 100)}% (~{solarMW} MW est. PV)
+      </span>,
+    ],
+    [
+      "Load Mix & Profile",
+      `${f.mix} (${f.profile === "residential" ? "Bimodal peaks" : "Duck curve"})`,
     ],
   ];
 
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle>Feeder characteristics</CardTitle>
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle>Feeder & Model Characteristics</CardTitle>
+          <Badge variant="outline" className="text-[10px] font-mono">
+            15-min Resolution
+          </Badge>
+        </div>
       </CardHeader>
       <CardContent>
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-xs">
           {rows.map(([k, v]) => (
             <div key={k} className="contents">
-              <dt className="text-muted-foreground">{k}</dt>
-              <dd className="text-right font-medium">{v}</dd>
+              <dt className="text-muted-foreground self-center">{k}</dt>
+              <dd className="text-right font-medium self-center">{v}</dd>
             </div>
           ))}
         </dl>
@@ -231,8 +277,11 @@ function FeederCard({ bundle }: { bundle: Bundle }) {
  */
 function CapacityCard({ bundle }: { bundle: Bundle }) {
   const firm = capacityMW(bundle.feeder);
-  const expected = (bundle.kpis.peakMW / firm) * 100;
-  const upper = (bundle.kpis.peakUpperMW / firm) * 100;
+  const expected = firm > 0 ? (bundle.kpis.peakMW / firm) * 100 : 0;
+  const upper = firm > 0 ? (bundle.kpis.peakUpperMW / firm) * 100 : 0;
+  const capLabel = bundle.feeder.capacityMVA >= 1
+    ? `${bundle.feeder.capacityMVA.toFixed(1)} MVA`
+    : `${(bundle.feeder.capacityMVA * 1000).toFixed(0)} kVA`;
 
   return (
     <Card>
@@ -242,7 +291,7 @@ function CapacityCard({ bundle }: { bundle: Bundle }) {
       <CardContent className="space-y-2.5">
         <div className="tnum text-xs text-muted-foreground">
           {mw(bundle.kpis.peakMW)} MW expected · {mw(bundle.kpis.peakUpperMW)} MW worst case ·{" "}
-          {mw(firm)} MW firm ({bundle.feeder.capacityMVA} MVA @ {bundle.feeder.powerFactor} pf)
+          {mw(firm)} MW firm ({capLabel} @ {bundle.feeder.powerFactor} pf)
         </div>
         <div className="relative h-3 w-full overflow-hidden rounded-full bg-muted">
           <div

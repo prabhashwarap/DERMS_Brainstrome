@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { NodeDetailPanel, type MapNodeDetails } from "./NodeDetailPanel";
 import {
   Zap,
   Cable,
@@ -210,9 +211,40 @@ function ZoomWatcher({ onZoom }: { onZoom: (z: number) => void }) {
 }
 
 export function ForecastPlusMap() {
-  const [branch, setBranch] = useState("all");
-  const [csc, setCsc] = useState("all");
+  const [branch, setBranch] = useState("nugegoda");
+  const [csc, setCsc] = useState("maharagama");
   const [feeder, setFeeder] = useState("all");
+  const [selectedNode, setSelectedNode] = useState<MapNodeDetails | null>(null);
+
+  const handleFilterToNode = (n: MapNodeDetails) => {
+    if (n.branchId) {
+      setBranch(n.branchId);
+      setCsc("all");
+      setFeeder("all");
+    } else if (n.branchName) {
+      const foundBranch = LECO_DATA.branches.find(b => b.name === n.branchName);
+      if (foundBranch) {
+        setBranch(foundBranch.id);
+        setCsc("all");
+        setFeeder("all");
+      }
+    }
+    if (n.cscId) {
+      setCsc(n.cscId);
+      setFeeder("all");
+    } else if (n.cscName) {
+      const foundBranch = LECO_DATA.branches.find(b => b.cscs.some(c => c.name === n.cscName));
+      if (foundBranch) {
+        setBranch(foundBranch.id);
+        const foundCsc = foundBranch.cscs.find(c => c.name === n.cscName);
+        if (foundCsc) setCsc(foundCsc.id);
+        setFeeder("all");
+      }
+    }
+    if (n.feederId) {
+      setFeeder(n.feederId);
+    }
+  };
 
   // Default view: core network layers only. Everything else is opt-in.
   const [layers, setLayers] = useState<LayerVisibility>({
@@ -235,8 +267,8 @@ export function ForecastPlusMap() {
   const [legendOpen, setLegendOpen] = useState(false);
 
   // Live map zoom level, updated as the user scrolls/zooms (not just on filter
-  // changes). Seeded to the initial filter-derived zoom below.
-  const [liveZoom, setLiveZoom] = useState(11);
+  // changes). Seeded to the initial filter-derived zoom below (zoom level 14 for CSC view).
+  const [liveZoom, setLiveZoom] = useState(14);
 
   const availableCscs = useMemo(() => {
     if (branch === "all") return [];
@@ -517,9 +549,16 @@ export function ForecastPlusMap() {
     // Deterministic deviation vs. seasonal average for this scope (-4% .. +8%).
     const scopeKey = `${branch}|${csc}|${feeder}`;
     const vsAverage = ((hashStr(scopeKey) % 120) / 10) - 4;
+    const fmtStat = (v: number) => {
+      const abs = Math.abs(v);
+      if (abs >= 10) return v.toFixed(1);
+      if (abs >= 1) return v.toFixed(2);
+      if (abs >= 0.01) return v.toFixed(3);
+      return v.toFixed(4);
+    };
     return {
-      peakVal: peak.toFixed(1),
-      energyVal: energy.toFixed(1),
+      peakVal: fmtStat(peak),
+      energyVal: fmtStat(energy),
       timeHour: peakHour,
       vsAverage,
       feederCount: scopeSites.length,
@@ -671,192 +710,432 @@ export function ForecastPlusMap() {
         </div>
       </div>
 
-      {/* Map Area with Leaflet & Floating Layer Legend */}
-      <div className="flex-1 rounded-lg overflow-hidden border border-border relative shadow-sm">
-        <MapContainer center={mapCenter} zoom={mapZoom} style={{ height: "100%", width: "100%", zIndex: 0 }}>
-          <MapView sites={scopeCenters} center={mapCenter} zoom={mapZoom} />
-          <ZoomWatcher onZoom={setLiveZoom} />
+      {/* Map Area & Floating Overlay Container */}
+      <div className="flex-1 min-h-0 relative rounded-lg overflow-hidden border border-border shadow-sm">
+        
+        {/* Full Width Map View */}
+        <div className="w-full h-full">
+          <MapContainer center={mapCenter} zoom={mapZoom} style={{ height: "100%", width: "100%", zIndex: 0 }}>
+            <MapView sites={scopeCenters} center={mapCenter} zoom={mapZoom} />
+            <ZoomWatcher onZoom={setLiveZoom} />
 
-          {/* Carto Positron Crisp Light Tile Layer (100% Free & Reliable) */}
-          <TileLayer
-            attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-            maxZoom={19}
-          />
-
-          {/* LECO Org Hierarchy: Branch HQ */}
-          {layers.branchHq && orgMarkers.branchHqs.map(b => (
-            <Marker key={`branch-${b.id}`} position={b.center} icon={branchHqIcon}>
-              <Popup>
-                <div className="text-xs font-semibold">{b.name} Branch HQ</div>
-                <div className="text-[11px] text-muted-foreground">LECO Branch Office &middot; {b.cscs.length} CSCs</div>
-              </Popup>
-            </Marker>
-          ))}
-
-          {/* LECO Org Hierarchy: CSC HQ */}
-          {layers.cscHq && orgMarkers.cscHqs.map(c => (
-            <Marker key={`csc-${c.id}`} position={c.center} icon={cscHqIcon}>
-              <Popup>
-                <div className="text-xs font-semibold">{c.name} CSC HQ</div>
-                <div className="text-[11px] text-muted-foreground">Consumer Service Center &middot; {c.feeders.length} feeders</div>
-              </Popup>
-            </Marker>
-          ))}
-
-          {/* LECO Org Hierarchy: Feeders */}
-          {layers.feeder && orgMarkers.feeders.map(f => (
-            <Marker key={`feeder-${f.id}`} position={f.center} icon={feederIcon}>
-              <Popup>
-                <div className="text-xs font-semibold">{f.name} Feeder</div>
-                <div className="text-[11px] text-muted-foreground">{f.csc} CSC</div>
-              </Popup>
-            </Marker>
-          ))}
-
-          {/* Distribution Lines following OSM Road Network */}
-          {layers.distribution && baseGrid.flatMap(site =>
-            site.transformers.map(t => {
-              const key = routeKey(site.substation, t.pos);
-              const path = roadRoutes[key] || fallbackRoute(site.substation, t.pos);
-              return (
-                <Polyline
-                  key={key}
-                  positions={path}
-                  pathOptions={{ color: '#0284c7', weight: 3.5, opacity: 0.9 }}
-                />
-              );
-            })
-          )}
-
-          {/* Service Drop Lines */}
-          {layers.distribution && consumers.map(c => (
-            <Polyline
-              key={`drop-${c.id}`}
-              positions={[c.pos, c.roadPoint]}
-              pathOptions={{ color: '#38bdf8', weight: 1.5, opacity: 0.7, dashArray: '3 3' }}
+            {/* Carto Positron Crisp Light Tile Layer (100% Free & Reliable) */}
+            <TileLayer
+              attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+              url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+              maxZoom={19}
             />
-          ))}
 
-          {/* Substation Markers (one per feeder in scope) */}
-          {layers.substation && baseGrid.map(site => (
-            <Marker key={`sub-${site.feederId}`} position={site.substation} icon={substationIcon}>
-              <Popup>
-                <div className="text-xs font-semibold">{site.feederName} Substation</div>
-                <div className="text-[11px] text-muted-foreground">{site.cscName} CSC &middot; {site.branchName} Branch</div>
-                <div className="text-[11px] text-muted-foreground font-mono">ID: SUB-{site.feederId.toUpperCase()}</div>
-              </Popup>
-            </Marker>
-          ))}
-
-          {/* Transformers */}
-          {layers.transformer && baseGrid.flatMap(site =>
-            site.transformers.map(t => (
-              <Marker key={t.id} position={t.pos} icon={transformerIcon}>
-                <Popup>
-                  <div className="text-xs font-semibold">{t.name}</div>
-                  <div className="text-[11px] text-muted-foreground">Distribution Transformer 11kV/400V</div>
-                </Popup>
-              </Marker>
-            ))
-          )}
-
-          {/* Meter Endpoints & DERs */}
-          {consumers.map(c => (
-            <React.Fragment key={c.id}>
-              {layers.meterEndpoint && (
-                <CircleMarker 
-                  center={c.pos} 
-                  radius={4} 
-                  pathOptions={{ color: '#ffffff', fillColor: '#0f172a', fillOpacity: 1, weight: 1.5 }}
+            {/* LECO Org Hierarchy: Branch HQ */}
+            {layers.branchHq && orgMarkers.branchHqs.map(b => {
+              const nodeData: MapNodeDetails = {
+                id: b.id,
+                name: `${b.name} Branch HQ`,
+                type: "branch",
+                typeName: "Branch HQ",
+                branchId: b.id,
+                branchName: b.name,
+                center: b.center,
+                status: "Normal"
+              };
+              return (
+                <Marker
+                  key={`branch-${b.id}`}
+                  position={b.center}
+                  icon={branchHqIcon}
+                  eventHandlers={{ click: () => setSelectedNode(nodeData) }}
                 >
                   <Popup>
-                    <div className="text-xs font-semibold">Meter Endpoint</div>
-                    <div className="text-[11px] text-muted-foreground">AMI Smart Meter &middot; <span className="font-mono">ID: {c.id}</span></div>
-                  </Popup>
-                </CircleMarker>
-              )}
-
-              {/* Distributed Solar */}
-              {layers.distributedSolar && c.der === "solar" && (
-                <Marker position={[c.pos[0] + 0.00008, c.pos[1] + 0.00008]} icon={distributedSolarIcon}>
-                  <Popup>
-                    <div className="text-xs font-semibold">Distributed Solar</div>
-                    <div className="text-[11px] text-muted-foreground">Rooftop Solar PV</div>
+                    <div className="text-xs font-semibold">{b.name} Branch HQ</div>
+                    <div className="text-[11px] text-muted-foreground mb-1.5">LECO Branch Office &middot; {b.cscs.length} CSCs</div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedNode(nodeData)}
+                      className="px-2 py-1 bg-primary text-primary-foreground text-[10px] font-semibold rounded shadow-xs hover:bg-primary/90 transition-colors w-full"
+                    >
+                      View Branch Forecast
+                    </button>
                   </Popup>
                 </Marker>
-              )}
+              );
+            })}
 
-              {/* EVSE */}
-              {layers.evse && c.der === "ev" && (
-                <Marker position={[c.pos[0] + 0.00008, c.pos[1] + 0.00008]} icon={evseIcon}>
+            {/* LECO Org Hierarchy: CSC HQ */}
+            {layers.cscHq && orgMarkers.cscHqs.map(c => {
+              const nodeData: MapNodeDetails = {
+                id: c.id,
+                name: `${c.name} CSC HQ`,
+                type: "csc",
+                typeName: "CSC HQ",
+                cscId: c.id,
+                cscName: c.name,
+                center: c.center,
+                status: "Normal"
+              };
+              return (
+                <Marker
+                  key={`csc-${c.id}`}
+                  position={c.center}
+                  icon={cscHqIcon}
+                  eventHandlers={{ click: () => setSelectedNode(nodeData) }}
+                >
                   <Popup>
-                    <div className="text-xs font-semibold">EVSE</div>
-                    <div className="text-[11px] text-muted-foreground">EV Supply Equipment</div>
+                    <div className="text-xs font-semibold">{c.name} CSC HQ</div>
+                    <div className="text-[11px] text-muted-foreground mb-1.5">Consumer Service Center &middot; {c.feeders.length} feeders</div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedNode(nodeData)}
+                      className="px-2 py-1 bg-primary text-primary-foreground text-[10px] font-semibold rounded shadow-xs hover:bg-primary/90 transition-colors w-full"
+                    >
+                      View CSC Forecast
+                    </button>
                   </Popup>
                 </Marker>
-              )}
+              );
+            })}
 
-              {/* Distributed Battery */}
-              {layers.distributedBattery && c.der === "battery" && (
-                <Marker position={[c.pos[0] + 0.00008, c.pos[1] + 0.00008]} icon={distributedBatteryIcon}>
+            {/* LECO Org Hierarchy: Feeders */}
+            {layers.feeder && orgMarkers.feeders.map(f => {
+              const nodeData: MapNodeDetails = {
+                id: f.id,
+                name: `${f.name} Feeder`,
+                type: "feeder",
+                typeName: "Feeder Line",
+                feederId: f.id,
+                feederName: f.name,
+                cscName: f.csc,
+                center: f.center,
+                status: "Normal"
+              };
+              return (
+                <Marker
+                  key={`feeder-${f.id}`}
+                  position={f.center}
+                  icon={feederIcon}
+                  eventHandlers={{ click: () => setSelectedNode(nodeData) }}
+                >
                   <Popup>
-                    <div className="text-xs font-semibold">Distributed Battery</div>
-                    <div className="text-[11px] text-muted-foreground">Battery Storage (BESS)</div>
+                    <div className="text-xs font-semibold">{f.name} Feeder</div>
+                    <div className="text-[11px] text-muted-foreground mb-1.5">{f.csc} CSC</div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedNode(nodeData)}
+                      className="px-2 py-1 bg-primary text-primary-foreground text-[10px] font-semibold rounded shadow-xs hover:bg-primary/90 transition-colors w-full"
+                    >
+                      View Feeder Forecast
+                    </button>
                   </Popup>
                 </Marker>
-              )}
-            </React.Fragment>
-          ))}
+              );
+            })}
 
-        </MapContainer>
+            {/* Distribution Lines following OSM Road Network */}
+            {layers.distribution && baseGrid.flatMap(site =>
+              site.transformers.map(t => {
+                const key = routeKey(site.substation, t.pos);
+                const path = roadRoutes[key] || fallbackRoute(site.substation, t.pos);
+                return (
+                  <Polyline
+                    key={key}
+                    positions={path}
+                    pathOptions={{ color: '#0284c7', weight: 3.5, opacity: 0.9 }}
+                    eventHandlers={{
+                      click: () => setSelectedNode({
+                        id: `feeder-${site.feederId}`,
+                        name: `${site.feederName} Distribution Line`,
+                        type: "feeder",
+                        typeName: "11kV Distribution Line",
+                        branchName: site.branchName,
+                        cscName: site.cscName,
+                        feederName: site.feederName,
+                        status: "Normal"
+                      })
+                    }}
+                  />
+                );
+              })
+            )}
 
-        {/* Floating Right-Side Layer Legend Box (collapsible) */}
-        <div className="absolute top-4 right-4 z-[400] bg-background/95 backdrop-blur-md rounded-lg border border-border shadow-xl w-60 text-xs overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setLegendOpen(o => !o)}
-            className="w-full flex items-center justify-between px-3 py-2 hover:bg-accent/40 transition-colors"
-          >
-            <span className="flex items-center gap-2 font-semibold text-muted-foreground uppercase text-[10px] tracking-wider">
-              <Layers className="w-3.5 h-3.5 text-primary" /> Grid Layers
-            </span>
-            {legendOpen
-              ? <ChevronDown className="w-4 h-4 text-muted-foreground" />
-              : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
-          </button>
+            {/* Service Drop Lines */}
+            {layers.distribution && consumers.map(c => (
+              <Polyline
+                key={`drop-${c.id}`}
+                positions={[c.pos, c.roadPoint]}
+                pathOptions={{ color: '#38bdf8', weight: 1.5, opacity: 0.7, dashArray: '3 3' }}
+              />
+            ))}
 
-          {legendOpen && (
-            <div className="max-h-[calc(100vh-300px)] overflow-y-auto border-t border-border/40">
-              {legendGroups.map(group => (
-                <div key={group.title} className="border-b border-border/40 last:border-b-0">
-                  <div className="px-3 pt-2 pb-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                    {group.title}
-                  </div>
-                  {group.items.map(({ key, label, icon: Icon, color }) => {
-                    const active = layers[key];
-                    return (
+            {/* Substation Markers (one per feeder in scope) */}
+            {layers.substation && baseGrid.map(site => {
+              const nodeData: MapNodeDetails = {
+                id: `sub-${site.feederId}`,
+                name: `${site.feederName} Substation`,
+                type: "substation",
+                typeName: "Primary Substation",
+                branchName: site.branchName,
+                cscName: site.cscName,
+                feederName: site.feederName,
+                center: site.substation,
+                status: "Normal"
+              };
+              return (
+                <Marker
+                  key={`sub-${site.feederId}`}
+                  position={site.substation}
+                  icon={substationIcon}
+                  eventHandlers={{ click: () => setSelectedNode(nodeData) }}
+                >
+                  <Popup>
+                    <div className="text-xs font-semibold">{site.feederName} Substation</div>
+                    <div className="text-[11px] text-muted-foreground">{site.cscName} CSC &middot; {site.branchName} Branch</div>
+                    <div className="text-[11px] text-muted-foreground font-mono mb-1.5">ID: SUB-{site.feederId.toUpperCase()}</div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedNode(nodeData)}
+                      className="px-2 py-1 bg-primary text-primary-foreground text-[10px] font-semibold rounded shadow-xs hover:bg-primary/90 transition-colors w-full"
+                    >
+                      View Substation Forecast
+                    </button>
+                  </Popup>
+                </Marker>
+              );
+            })}
+
+            {/* Transformers */}
+            {layers.transformer && baseGrid.flatMap(site =>
+              site.transformers.map(t => {
+                const nodeData: MapNodeDetails = {
+                  id: t.id,
+                  name: t.name,
+                  type: "transformer",
+                  typeName: "Distribution Transformer",
+                  branchName: site.branchName,
+                  cscName: site.cscName,
+                  feederName: site.feederName,
+                  center: t.pos,
+                  status: "Optimal"
+                };
+                return (
+                  <Marker
+                    key={t.id}
+                    position={t.pos}
+                    icon={transformerIcon}
+                    eventHandlers={{ click: () => setSelectedNode(nodeData) }}
+                  >
+                    <Popup>
+                      <div className="text-xs font-semibold">{t.name}</div>
+                      <div className="text-[11px] text-muted-foreground mb-1.5">Distribution Transformer 11kV/400V</div>
                       <button
-                        key={key}
                         type="button"
-                        onClick={() => toggleLayer(key)}
-                        className={`w-full flex items-center justify-between px-3 py-1.5 hover:bg-accent/60 transition-colors text-left ${
-                          active ? "bg-accent/40 text-foreground font-medium" : "text-muted-foreground"
-                        }`}
+                        onClick={() => setSelectedNode(nodeData)}
+                        className="px-2 py-1 bg-primary text-primary-foreground text-[10px] font-semibold rounded shadow-xs hover:bg-primary/90 transition-colors w-full"
                       >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${color}`} />
-                          <span className="truncate">{label}</span>
-                        </div>
-                        {active && <Check className="w-3.5 h-3.5 text-primary flex-shrink-0 ml-1" />}
+                        View Transformer Forecast
                       </button>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-          )}
+                    </Popup>
+                  </Marker>
+                );
+              })
+            )}
+
+            {/* Meter Endpoints & DERs */}
+            {consumers.map(c => {
+              const meterNode: MapNodeDetails = {
+                id: c.id,
+                name: `AMI Smart Meter (${c.id})`,
+                type: "meterEndpoint",
+                typeName: "Smart Meter Endpoint",
+                center: c.pos,
+                status: "Normal"
+              };
+              const solarNode: MapNodeDetails = {
+                id: `pv-${c.id}`,
+                name: `Rooftop Solar PV (${c.id})`,
+                type: "distributedSolar",
+                typeName: "Distributed Solar PV",
+                center: c.pos,
+                status: "Active"
+              };
+              const evNode: MapNodeDetails = {
+                id: `ev-${c.id}`,
+                name: `EV Charger EVSE (${c.id})`,
+                type: "evse",
+                typeName: "EV Fast Charger",
+                center: c.pos,
+                status: "Active"
+              };
+              const batteryNode: MapNodeDetails = {
+                id: `bess-${c.id}`,
+                name: `Battery Storage BESS (${c.id})`,
+                type: "distributedBattery",
+                typeName: "Distributed Battery BESS",
+                center: c.pos,
+                status: "Optimal"
+              };
+
+              return (
+                <React.Fragment key={c.id}>
+                  {layers.meterEndpoint && (
+                    <CircleMarker 
+                      center={c.pos} 
+                      radius={4.5} 
+                      pathOptions={{ color: '#ffffff', fillColor: '#0f172a', fillOpacity: 1, weight: 1.5 }}
+                      eventHandlers={{ click: () => setSelectedNode(meterNode) }}
+                    >
+                      <Popup>
+                        <div className="text-xs font-semibold">Meter Endpoint</div>
+                        <div className="text-[11px] text-muted-foreground mb-1.5">AMI Smart Meter &middot; <span className="font-mono">ID: {c.id}</span></div>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedNode(meterNode)}
+                          className="px-2 py-1 bg-primary text-primary-foreground text-[10px] font-semibold rounded shadow-xs hover:bg-primary/90 transition-colors w-full"
+                        >
+                          View Meter Forecast
+                        </button>
+                      </Popup>
+                    </CircleMarker>
+                  )}
+
+                  {/* Distributed Solar */}
+                  {layers.distributedSolar && c.der === "solar" && (
+                    <Marker
+                      position={[c.pos[0] + 0.00008, c.pos[1] + 0.00008]}
+                      icon={distributedSolarIcon}
+                      eventHandlers={{ click: () => setSelectedNode(solarNode) }}
+                    >
+                      <Popup>
+                        <div className="text-xs font-semibold">Distributed Solar</div>
+                        <div className="text-[11px] text-muted-foreground mb-1.5">Rooftop Solar PV System</div>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedNode(solarNode)}
+                          className="px-2 py-1 bg-amber-600 text-white text-[10px] font-semibold rounded shadow-xs hover:bg-amber-700 transition-colors w-full"
+                        >
+                          View Solar Forecast
+                        </button>
+                      </Popup>
+                    </Marker>
+                  )}
+
+                  {/* EVSE */}
+                  {layers.evse && c.der === "ev" && (
+                    <Marker
+                      position={[c.pos[0] + 0.00008, c.pos[1] + 0.00008]}
+                      icon={evseIcon}
+                      eventHandlers={{ click: () => setSelectedNode(evNode) }}
+                    >
+                      <Popup>
+                        <div className="text-xs font-semibold">EVSE Charging Station</div>
+                        <div className="text-[11px] text-muted-foreground mb-1.5">EV Supply Equipment</div>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedNode(evNode)}
+                          className="px-2 py-1 bg-emerald-600 text-white text-[10px] font-semibold rounded shadow-xs hover:bg-emerald-700 transition-colors w-full"
+                        >
+                          View EVSE Forecast
+                        </button>
+                      </Popup>
+                    </Marker>
+                  )}
+
+                  {/* Distributed Battery */}
+                  {layers.distributedBattery && c.der === "battery" && (
+                    <Marker
+                      position={[c.pos[0] + 0.00008, c.pos[1] + 0.00008]}
+                      icon={distributedBatteryIcon}
+                      eventHandlers={{ click: () => setSelectedNode(batteryNode) }}
+                    >
+                      <Popup>
+                        <div className="text-xs font-semibold">Distributed Battery Storage</div>
+                        <div className="text-[11px] text-muted-foreground mb-1.5">Battery Storage (BESS)</div>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedNode(batteryNode)}
+                          className="px-2 py-1 bg-purple-600 text-white text-[10px] font-semibold rounded shadow-xs hover:bg-purple-700 transition-colors w-full"
+                        >
+                          View Battery Forecast
+                        </button>
+                      </Popup>
+                    </Marker>
+                  )}
+                </React.Fragment>
+              );
+            })}
+
+          </MapContainer>
+
+          {/* Floating Right-Side Layer Legend Box (collapsible) */}
+          <div className="absolute top-4 right-4 z-[400] bg-background/95 backdrop-blur-md rounded-lg border border-border shadow-xl w-60 text-xs overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setLegendOpen(o => !o)}
+              className="w-full flex items-center justify-between px-3 py-2 hover:bg-accent/40 transition-colors"
+            >
+              <span className="flex items-center gap-2 font-semibold text-muted-foreground uppercase text-[10px] tracking-wider">
+                <Layers className="w-3.5 h-3.5 text-primary" /> Grid Layers
+              </span>
+              {legendOpen
+                ? <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+            </button>
+
+            {legendOpen && (
+              <div className="max-h-[calc(100vh-300px)] overflow-y-auto border-t border-border/40">
+                {legendGroups.map(group => (
+                  <div key={group.title} className="border-b border-border/40 last:border-b-0">
+                    <div className="px-3 pt-2 pb-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                      {group.title}
+                    </div>
+                    {group.items.map(({ key, label, icon: Icon, color }) => {
+                      const active = layers[key];
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => toggleLayer(key)}
+                          className={`w-full flex items-center justify-between px-3 py-1.5 hover:bg-accent/60 transition-colors text-left ${
+                            active ? "bg-accent/40 text-foreground font-medium" : "text-muted-foreground"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${color}`} />
+                            <span className="truncate">{label}</span>
+                          </div>
+                          {active && <Check className="w-3.5 h-3.5 text-primary flex-shrink-0 ml-1" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
         </div>
+
+        {/* System-Wide Side Panel Overlay & Backdrop */}
+        {selectedNode && (
+          <>
+            {/* Full Viewport Backdrop */}
+            <div
+              className="fixed inset-0 z-[9998] bg-black/40 dark:bg-black/60 backdrop-blur-xs animate-in fade-in duration-200 cursor-pointer"
+              onClick={() => setSelectedNode(null)}
+              aria-label="Click away to close node panel"
+            />
+
+            {/* System-Wide Slide-Out Panel Wrapper */}
+            <div
+              className="fixed top-0 right-0 bottom-0 z-[9999] w-[95%] sm:w-[90%] md:w-[850px] lg:w-[980px] xl:w-[1100px] max-w-full shadow-2xl bg-background border-l border-border animate-in slide-in-from-right duration-300"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <NodeDetailPanel
+                node={selectedNode}
+                onClose={() => setSelectedNode(null)}
+                onFilterToNode={handleFilterToNode}
+              />
+            </div>
+          </>
+        )}
 
       </div>
     </div>

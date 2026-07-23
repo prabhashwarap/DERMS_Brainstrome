@@ -6,7 +6,7 @@
  * asset register — nothing downstream needs to change.
  */
 
-export type FeederId = "angulana" | "katunayake";
+export type FeederId = string;
 
 export interface Feeder {
   id: FeederId;
