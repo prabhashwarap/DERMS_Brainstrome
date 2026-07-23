@@ -11,6 +11,7 @@ import {
   Sun,
   SunMedium,
   TrendingUp,
+  Map,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/Logo";
@@ -26,34 +27,37 @@ import { cn } from "@/lib/utils";
  * navigation doesn't have to be redesigned when it merges in.
  */
 
-const NAV = [
+export const NAV = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "sites", label: "Sites", icon: SunMedium },
   { id: "usage", label: "Usage", icon: Gauge },
   { id: "generation", label: "Generation", icon: Sun },
   { id: "manage", label: "Manage", icon: SlidersHorizontal },
   { id: "forecasting", label: "Forecasting", icon: TrendingUp },
+  { id: "forecastPlus", label: "Forecast+", icon: Map },
   { id: "settings", label: "Settings", icon: Settings },
 ] as const;
 
-const ACTIVE = "forecasting";
+export type NavId = (typeof NAV)[number]["id"];
 
 interface Props {
   title: string;
   theme: "dark" | "light";
+  activeNav: NavId;
+  onNavChange: (id: NavId) => void;
   onThemeChange: (t: "dark" | "light") => void;
   onConfigToggle: () => void;
   children: ReactNode;
 }
 
-export function AppShell({ title, theme, onThemeChange, onConfigToggle, children }: Props) {
+export function AppShell({ title, theme, activeNav, onNavChange, onThemeChange, onConfigToggle, children }: Props) {
   // Open by default on desktop; on a laptop-narrow or tablet screen the rail
   // would cover the chart, so it starts closed and opens as an overlay.
   const [open, setOpen] = useState(() => window.innerWidth >= 1024);
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar open={open} onClose={() => setOpen(false)} />
+      <Sidebar open={open} onClose={() => setOpen(false)} activeNav={activeNav} onNavChange={onNavChange} />
 
       <div className={cn("transition-[padding] duration-200", open ? "lg:pl-64" : "lg:pl-0")}>
         <TopBar
@@ -79,7 +83,7 @@ export function AppShell({ title, theme, onThemeChange, onConfigToggle, children
   );
 }
 
-function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
+function Sidebar({ open, onClose, activeNav, onNavChange }: { open: boolean; onClose: () => void; activeNav: NavId; onNavChange: (id: NavId) => void; }) {
   return (
     <aside
       className={cn(
@@ -94,7 +98,7 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
 
       <nav className="flex flex-1 flex-col gap-1 px-3">
         {NAV.map(({ id, label, icon: Icon }) => {
-          const active = id === ACTIVE;
+          const active = id === activeNav;
           if (active) {
             return (
               <a
@@ -107,6 +111,18 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
                 {label}
               </a>
             );
+          }
+          if (id === "forecasting" || id === "forecastPlus") {
+             return (
+               <button
+                 key={id}
+                 onClick={() => onNavChange(id)}
+                 className="flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+               >
+                 <Icon className="h-[18px] w-[18px]" />
+                 {label}
+               </button>
+             );
           }
           return (
             <Tooltip key={id}>

@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AppShell } from "@/components/AppShell";
+import { AppShell, type NavId } from "@/components/AppShell";
 import { ForecastToolbar } from "@/components/ForecastToolbar";
 import { KpiRow } from "@/components/KpiRow";
 import { ForecastChart, type RangeKey } from "@/components/ForecastChart";
 import { ContextPanel } from "@/components/ContextPanel";
 import { ForecastTable } from "@/components/ForecastTable";
 import { ConfigPanel } from "@/components/ConfigPanel";
+import { ForecastPlus } from "@/components/ForecastPlus";
 import { FEEDERS, type FeederId } from "@/pipeline/feeders";
 import { runForecast, type PredictionOverrides } from "@/pipeline/forecast";
 import { lastRunAtOrBefore, scheduleDailyRun } from "@/pipeline/scheduler";
@@ -23,6 +24,7 @@ export default function App() {
   const [hoverTs, setHoverTs] = useState<number | null>(null);
   const [theme, setTheme] = useState<"dark" | "light">("light");
   const [isConfigOpen, setIsConfigOpen] = useState(false);
+  const [activeNav, setActiveNav] = useState<NavId>("forecasting");
   const [predictionOverrides, setPredictionOverrides] = useState<PredictionOverrides>({});
 
   useEffect(() => {
@@ -49,10 +51,15 @@ export default function App() {
       <AppShell
         title="Forecasting"
         theme={theme}
+        activeNav={activeNav}
+        onNavChange={setActiveNav}
         onThemeChange={setTheme}
         onConfigToggle={() => setIsConfigOpen(true)}
       >
-        <main id="main" className="flex flex-col gap-4 p-4 lg:p-6">
+        {activeNav === "forecastPlus" ? (
+          <ForecastPlus />
+        ) : (
+          <main id="main" className="flex flex-col gap-4 p-4 lg:p-6">
           <ForecastToolbar
             feederId={feederId}
             onFeederChange={setFeederId}
@@ -85,6 +92,7 @@ export default function App() {
             be used for dispatch or procurement.
           </footer>
         </main>
+        )}
       </AppShell>
       <ConfigPanel
         open={isConfigOpen}
