@@ -42,10 +42,11 @@ interface Props {
   title: string;
   theme: "dark" | "light";
   onThemeChange: (t: "dark" | "light") => void;
+  onConfigToggle: () => void;
   children: ReactNode;
 }
 
-export function AppShell({ title, theme, onThemeChange, children }: Props) {
+export function AppShell({ title, theme, onThemeChange, onConfigToggle, children }: Props) {
   // Open by default on desktop; on a laptop-narrow or tablet screen the rail
   // would cover the chart, so it starts closed and opens as an overlay.
   const [open, setOpen] = useState(() => window.innerWidth >= 1024);
@@ -60,6 +61,7 @@ export function AppShell({ title, theme, onThemeChange, children }: Props) {
           theme={theme}
           onThemeChange={onThemeChange}
           onToggleSidebar={() => setOpen((v) => !v)}
+          onConfigToggle={onConfigToggle}
         />
         {children}
       </div>
@@ -152,11 +154,13 @@ function TopBar({
   theme,
   onThemeChange,
   onToggleSidebar,
+  onConfigToggle,
 }: {
   title: string;
   theme: "dark" | "light";
   onThemeChange: (t: "dark" | "light") => void;
   onToggleSidebar: () => void;
+  onConfigToggle: () => void;
 }) {
   return (
     <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-border bg-background/90 px-4 py-3 backdrop-blur lg:px-6">
@@ -192,6 +196,15 @@ function TopBar({
             </span>
           </TooltipTrigger>
           <TooltipContent>Alerting arrives after v1 — space reserved.</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon" onClick={onConfigToggle} aria-label="Open configuration">
+              <Settings className="h-5 w-5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Configuration</TooltipContent>
         </Tooltip>
 
         <div className="flex items-center gap-3 pl-1">

@@ -6,8 +6,9 @@ import { KpiRow } from "@/components/KpiRow";
 import { ForecastChart, type RangeKey } from "@/components/ForecastChart";
 import { ContextPanel } from "@/components/ContextPanel";
 import { ForecastTable } from "@/components/ForecastTable";
+import { ConfigPanel } from "@/components/ConfigPanel";
 import { FEEDERS, type FeederId } from "@/pipeline/feeders";
-import { runForecast } from "@/pipeline/forecast";
+import { runForecast, type PredictionOverrides } from "@/pipeline/forecast";
 import { lastRunAtOrBefore, scheduleDailyRun } from "@/pipeline/scheduler";
 
 /**
@@ -21,6 +22,8 @@ export default function App() {
   const [showBaseline, setShowBaseline] = useState(false);
   const [hoverTs, setHoverTs] = useState<number | null>(null);
   const [theme, setTheme] = useState<"dark" | "light">("light");
+  const [isConfigOpen, setIsConfigOpen] = useState(false);
+  const [predictionOverrides, setPredictionOverrides] = useState<PredictionOverrides>({});
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -37,13 +40,18 @@ export default function App() {
   useEffect(() => scheduleDailyRun(setRunAt), []);
 
   const bundle = useMemo(
-    () => runForecast(FEEDERS[feederId], runAt),
-    [feederId, runAt]
+    () => runForecast(FEEDERS[feederId], runAt, predictionOverrides),
+    [feederId, runAt, predictionOverrides]
   );
 
   return (
     <TooltipProvider delayDuration={200}>
-      <AppShell title="Forecasting" theme={theme} onThemeChange={setTheme}>
+      <AppShell
+        title="Forecasting"
+        theme={theme}
+        onThemeChange={setTheme}
+        onConfigToggle={() => setIsConfigOpen(true)}
+      >
         <main id="main" className="flex flex-col gap-4 p-4 lg:p-6">
           <ForecastToolbar
             feederId={feederId}
@@ -78,6 +86,14 @@ export default function App() {
           </footer>
         </main>
       </AppShell>
+      <ConfigPanel
+        open={isConfigOpen}
+        onClose={() => setIsConfigOpen(false)}
+        runAt={runAt}
+        onRunAtChange={setRunAt}
+        overrides={predictionOverrides}
+        onOverridesChange={setPredictionOverrides}
+      />
     </TooltipProvider>
   );
 }

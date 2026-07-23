@@ -78,6 +78,13 @@ export interface Bundle {
 /** The scheduled run time, in local hours. */
 export const RUN_HOUR = 6;
 
+export interface PredictionOverrides {
+  tempC?: number | null;
+  cloud?: number | null;
+  isHoliday?: boolean | null;
+  weekday?: number | null;
+}
+
 function ninetyFifth(residuals: number[]): number {
   if (!residuals.length) return 0;
   const sorted = [...residuals].sort((a, b) => a - b);
@@ -89,7 +96,7 @@ function ninetyFifth(residuals: number[]): number {
  * 06:00 run, plus the backtest that supports the accuracy indicator and the
  * width of the confidence band.
  */
-export function runForecast(feeder: Feeder, now: number): Bundle {
+export function runForecast(feeder: Feeder, now: number, overrides?: PredictionOverrides): Bundle {
   const readings = loadFeederHistory(feeder, { now });
   const parts: LocalParts[] = readings.map((r) => localParts(r.ts));
   const index = new Map<number, number>();
@@ -127,8 +134,8 @@ export function runForecast(feeder: Feeder, now: number): Bundle {
     readings,
     parts,
     originIndex,
-    parts[originIndex].weekday,
-    isHoliday(parts[originIndex])
+    overrides?.weekday ?? parts[originIndex].weekday,
+    overrides?.isHoliday ?? isHoliday(parts[originIndex])
   );
 
   const forecast = predictHorizon(
@@ -137,7 +144,8 @@ export function runForecast(feeder: Feeder, now: number): Bundle {
     parts,
     originIndex,
     residualsByHour,
-    baselineProfile
+    baselineProfile,
+    overrides
   );
 
   const historyStart = Math.max(frameStart, originIndex - 30 * SLOTS_PER_DAY);
@@ -170,7 +178,8 @@ function predictHorizon(
   parts: LocalParts[],
   originIndex: number,
   residualsByHour: number[],
-  baselineProfile: number[]
+  baselineProfile: number[],
+  overrides?: PredictionOverrides
 ): ForecastPoint[] {
   const day = SLOTS_PER_DAY;
   const week = 7 * day;
@@ -184,13 +193,19 @@ function predictHorizon(
     const i = originIndex + s;
     const p = parts[i];
     const r = readings[i]; // weather forecast for the horizon — an input, not a target
+    
+    const tempC = overrides?.tempC ?? r.tempC;
+    const cloud = overrides?.cloud ?? r.cloud;
+    const isHoliday = overrides?.isHoliday ?? r.isHoliday;
+    const weekday = overrides?.weekday ?? p.weekday;
+
     const x = buildRow({
       decimalHour: p.decimalHour,
-      weekday: p.weekday,
+      weekday,
       month: p.month,
-      isHoliday: r.isHoliday,
-      tempC: r.tempC,
-      cloud: r.cloud,
+      isHoliday,
+      tempC,
+      cloud,
       lag1d: readings[i - day].loadMW,
       lag7d: readings[i - week].loadMW,
       lag1dRoll,
@@ -205,8 +220,8 @@ function predictHorizon(
       lower: Math.max(0, expected - spread),
       upper: expected + spread,
       baseline: baselineProfile[s],
-      tempC: r.tempC,
-      cloud: r.cloud,
+      tempC,
+      cloud,
     });
   }
   return smoothBounds(out);

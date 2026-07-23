@@ -18,43 +18,43 @@
 
 @layer base {
   :root {
-    --background: 222 60% 6%;
-    --foreground: 214 32% 91%;
+    --background: 245 48% 19%;
+    --foreground: 210 40% 98%;
 
-    --card: 221 47% 11%;
-    --card-foreground: 214 32% 91%;
+    --card: 245 48% 15%;
+    --card-foreground: 210 40% 98%;
 
-    --popover: 221 50% 9%;
-    --popover-foreground: 214 32% 91%;
+    --popover: 245 48% 22%;
+    --popover-foreground: 210 40% 98%;
 
-    --primary: 243 75% 66%;
-    --primary-foreground: 226 60% 8%;
+    --primary: 246 52% 46%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 38% 16%;
-    --secondary-foreground: 214 30% 86%;
+    --secondary: 245 48% 24%;
+    --secondary-foreground: 210 40% 98%;
 
-    --muted: 220 34% 15%;
-    --muted-foreground: 215 20% 62%;
+    --muted: 245 48% 24%;
+    --muted-foreground: 245 20% 70%;
 
-    --accent: 220 40% 18%;
-    --accent-foreground: 214 32% 91%;
+    --accent: 246 52% 46%;
+    --accent-foreground: 0 0% 100%;
 
-    --border: 219 34% 20%;
-    --input: 219 34% 20%;
-    --ring: 243 75% 66%;
+    --border: 245 48% 24%;
+    --input: 245 48% 24%;
+    --ring: 246 52% 46%;
 
     --radius: 0.9rem;
 
     /* chart surface + data tokens (dark) */
-    --viz-surface: #0b1220;
-    --viz-grid: rgba(148, 173, 214, 0.11);
-    --viz-axis: #7d90b4;
-    --viz-actual: #0c9fbd;
-    --viz-forecast: #22d3ee;
-    --viz-band: rgba(34, 211, 238, 0.17);
-    --viz-baseline: #8257f5;
-    --viz-input: #93a7cf;
-    --viz-divider: rgba(179, 197, 230, 0.42);
+    --viz-surface: #17182E;
+    --viz-grid: rgba(255, 255, 255, 0.05);
+    --viz-axis: #71718A;
+    --viz-actual: #10B981;
+    --viz-forecast: #38BDF8;
+    --viz-band: rgba(56, 189, 248, 0.15);
+    --viz-baseline: #818CF8;
+    --viz-input: #94A3B8;
+    --viz-divider: rgba(255, 255, 255, 0.1);
   }
 
   :root[data-theme="light"] {

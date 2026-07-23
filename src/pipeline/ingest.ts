@@ -96,8 +96,8 @@ function solarShape(h: number): number {
 }
 
 const weekdayFactor = (profile: Feeder["profile"], weekday: number) => {
-  if (profile === "residential") return weekday === 0 ? 0.88 : weekday === 6 ? 0.94 : 1;
-  return weekday === 0 ? 0.68 : weekday === 6 ? 0.84 : 1;
+  if (profile === "residential") return weekday === 0 ? 0.65 : weekday === 6 ? 0.94 : 1;
+  return weekday === 0 ? 0.40 : weekday === 6 ? 0.84 : 1;
 };
 
 /* ------------------------------------------------------------------ */
