@@ -1,0 +1,125 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Oversight design language.
+ *
+ * Dark is the operating default — control rooms run 24/7 and a luminous
+ * interface at 03:00 is a fatigue problem, not a taste problem. Light mode is
+ * the same token set restepped for a white surface, not an inverted flip.
+ *
+ * Data colours are validated for CVD separation and contrast against both
+ * surfaces; see README. Saturated red/amber/orange appear nowhere in this file:
+ * they stay quarantined for the alarm layer that lands after v1.
+ */
+
+@layer base {
+  :root {
+    --background: 222 60% 6%;
+    --foreground: 214 32% 91%;
+
+    --card: 221 47% 11%;
+    --card-foreground: 214 32% 91%;
+
+    --popover: 221 50% 9%;
+    --popover-foreground: 214 32% 91%;
+
+    --primary: 243 75% 66%;
+    --primary-foreground: 226 60% 8%;
+
+    --secondary: 220 38% 16%;
+    --secondary-foreground: 214 30% 86%;
+
+    --muted: 220 34% 15%;
+    --muted-foreground: 215 20% 62%;
+
+    --accent: 220 40% 18%;
+    --accent-foreground: 214 32% 91%;
+
+    --border: 219 34% 20%;
+    --input: 219 34% 20%;
+    --ring: 243 75% 66%;
+
+    --radius: 0.9rem;
+
+    /* chart surface + data tokens (dark) */
+    --viz-surface: #0b1220;
+    --viz-grid: rgba(148, 173, 214, 0.11);
+    --viz-axis: #7d90b4;
+    --viz-actual: #0c9fbd;
+    --viz-forecast: #22d3ee;
+    --viz-band: rgba(34, 211, 238, 0.17);
+    --viz-baseline: #8257f5;
+    --viz-input: #93a7cf;
+    --viz-divider: rgba(179, 197, 230, 0.42);
+  }
+
+  :root[data-theme="light"] {
+    --background: 220 33% 97%;
+    --foreground: 224 40% 14%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 224 40% 14%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 40% 14%;
+
+    --primary: 244 54% 36%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 30% 94%;
+    --secondary-foreground: 224 35% 22%;
+
+    --muted: 220 28% 95%;
+    --muted-foreground: 220 12% 42%;
+
+    --accent: 226 60% 96%;
+    --accent-foreground: 224 40% 14%;
+
+    --border: 220 22% 88%;
+    --input: 220 22% 88%;
+    --ring: 244 54% 36%;
+
+    --viz-surface: #ffffff;
+    --viz-grid: rgba(30, 52, 92, 0.09);
+    --viz-axis: #5c6b85;
+    --viz-actual: #0093b5;
+    --viz-forecast: #12b4d8;
+    --viz-band: rgba(0, 147, 181, 0.16);
+    --viz-baseline: #6d28d9;
+    --viz-input: #64748b;
+    --viz-divider: rgba(30, 41, 59, 0.35);
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04";
+  }
+
+  /* Tabular figures everywhere a number can change under the reader's eye. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+}
+
+
+/* Brand lockup: one file per surface, swapped by the theme on the root. */
+:root[data-theme="dark"] .logo-on-light,
+:root[data-theme="light"] .logo-on-dark {
+  display: none;
+}
+
+/* Recharts leaves a focus outline on the SVG wrapper; the crosshair already
+   communicates focus position. */
+.recharts-wrapper:focus,
+.recharts-surface:focus {
+  outline: none;
+}
