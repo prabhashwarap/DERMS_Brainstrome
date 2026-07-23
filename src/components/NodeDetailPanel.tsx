@@ -139,15 +139,32 @@ function createNodeBundle(node: MapNodeDetails, now: number): Bundle {
   }
 
   const isSolar = node.type === "distributedSolar" || node.type === "utilitySolar";
+  const isEv = node.type === "evse";
+  const isGridAggregate = node.type === "feeder" || node.type === "substation" || node.type === "branch" || node.type === "csc";
+  const isTransformer = node.type === "transformer";
+
+  const hasSolar = isSolar || (isGridAggregate && h % 3 !== 0) || (isTransformer && h % 2 === 0);
+  const hasEvCharging = isEv || (isGridAggregate && h % 2 === 0) || (isTransformer && h % 3 === 0);
+
+  const solarPenetration = hasSolar
+    ? isSolar
+      ? 0.85
+      : isGridAggregate
+      ? 0.22
+      : 0.12
+    : 0;
+
+  const evPenetration = hasEvCharging
+    ? isEv
+      ? 0.75
+      : isGridAggregate
+      ? 0.16
+      : 0.10
+    : 0;
+
   const profile: "residential" | "industrial" = isSolar
     ? "industrial"
     : (h % 2 === 0 ? "residential" : "industrial");
-
-  const solarPenetration = isSolar
-    ? 0.85
-    : node.type === "feeder"
-    ? 0.18
-    : 0.12;
 
   const feeder: Feeder = {
     id: node.id,
@@ -157,6 +174,9 @@ function createNodeBundle(node: MapNodeDetails, now: number): Bundle {
     capacityMVA: Number((firmCap / 0.95).toFixed(2)),
     powerFactor: 0.95,
     solarPenetration,
+    evPenetration,
+    hasSolar,
+    hasEvCharging,
     loadFactor: 0.58,
     profile,
     mix: node.typeName,
@@ -245,7 +265,7 @@ export function NodeDetailPanel({ node, onClose, onFilterToNode }: NodeDetailPan
 
             {/* Two-Column Grid Layout matching Forecasting Tab */}
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-              {/* Main Left Column: ForecastChart & ForecastTable */}
+              {/* Main Left Column: ForecastChart, GenerationEvCharts & ForecastTable */}
               <div className="flex min-w-0 flex-col gap-4 self-start">
                 <ForecastChart
                   bundle={bundle}
@@ -256,15 +276,13 @@ export function NodeDetailPanel({ node, onClose, onFilterToNode }: NodeDetailPan
                   onHover={setHoverTs}
                   heightClassName="h-[240px] sm:h-[280px]"
                 />
+                <GenerationEvCharts bundle={bundle} />
                 <ForecastTable bundle={bundle} />
               </div>
 
               {/* Context Right Column: ContextPanel */}
               <ContextPanel bundle={bundle} hoverTs={hoverTs} />
             </div>
-
-            {/* Full-width companion forecasts (collapsible) */}
-            <GenerationEvCharts bundle={bundle} />
           </>
         )}
       </div>

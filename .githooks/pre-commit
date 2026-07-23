@@ -1,0 +1,19 @@
+#!/usr/bin/env sh
+# graphify pre-commit hook: keep .graphify/map.md in sync with source exports.
+# Only runs when TypeScript sources (or the generator itself) are staged, so
+# commits that don't touch code aren't slowed down.
+
+# Staged files (added/copied/modified/renamed), NUL-safe.
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+
+echo "$staged" | grep -Eq '^(src/.*\.(ts|tsx)|scripts/graphify\.mjs)$' || exit 0
+
+echo "graphify: regenerating code map…"
+npm run graphify --silent || {
+  echo "graphify: generation failed; commit aborted." >&2
+  exit 1
+}
+
+# Re-stage the map if it changed so the commit includes it.
+git add .graphify/map.md
+exit 0

@@ -430,6 +430,11 @@ export function ForecastPlusMap() {
   // every scope. A wide view (all branches) can need ~140 routes, so we run them
   // through a small concurrency-limited queue rather than firing all at once,
   // which would get rate-limited by the public OSRM server.
+  //
+  // Results are BATCHED into a single state update on a short interval instead
+  // of one setState per route. Otherwise ~140 sequential updates would each
+  // recompute `consumers`, rebuild the whole `markerLayers` tree, and re-
+  // reconcile hundreds of Leaflet layers -- the main source of map lag/stutter.
   useEffect(() => {
     let cancelled = false;
 
@@ -441,6 +446,20 @@ export function ForecastPlusMap() {
       });
     });
     if (jobs.length === 0) return;
+
+    // Accumulate completed routes here and flush them together, so the map
+    // re-renders a handful of times total rather than once per route.
+    const pending: Record<string, Array<[number, number]>> = {};
+    const flush = () => {
+      const keys = Object.keys(pending);
+      if (keys.length === 0) return;
+      const batch = { ...pending };
+      keys.forEach(k => delete pending[k]);
+      setRoadRoutes(prev => ({ ...prev, ...batch }));
+    };
+    const flushTimer = window.setInterval(() => {
+      if (!cancelled) flush();
+    }, 400);
 
     let next = 0;
     const CONCURRENCY = 6;
@@ -457,25 +476,30 @@ export function ForecastPlusMap() {
         .then(data => {
           if (cancelled) return;
           if (data.code === "Ok" && data.routes?.[0]?.geometry?.coordinates) {
-            const coords: Array<[number, number]> = data.routes[0].geometry.coordinates.map(
+            pending[job.key] = data.routes[0].geometry.coordinates.map(
               (c: [number, number]) => [c[1], c[0]]
             );
-            setRoadRoutes(prev => ({ ...prev, [job.key]: coords }));
           } else {
-            setRoadRoutes(prev => ({ ...prev, [job.key]: fallbackRoute(job.sub, job.pos) }));
+            pending[job.key] = fallbackRoute(job.sub, job.pos);
           }
         })
         .catch(() => {
-          if (!cancelled) setRoadRoutes(prev => ({ ...prev, [job.key]: fallbackRoute(job.sub, job.pos) }));
+          if (!cancelled) pending[job.key] = fallbackRoute(job.sub, job.pos);
         })
         .then(runNext);
     };
 
     Promise.all(
       Array.from({ length: Math.min(CONCURRENCY, jobs.length) }, () => runNext())
-    );
+    ).then(() => {
+      // Final flush so the last partial batch lands even between ticks.
+      if (!cancelled) flush();
+    });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      window.clearInterval(flushTimer);
+    };
   }, [baseGrid]);
 
   // Sample meter endpoints evenly along each transformer's actual road path so

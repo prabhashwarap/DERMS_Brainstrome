@@ -55,6 +55,16 @@
     --viz-baseline: #818CF8;
     --viz-input: #94A3B8;
     --viz-divider: rgba(255, 255, 255, 0.1);
+
+    /* solar generation chart colors (dark) */
+    --viz-solar-actual: #F59E0B;
+    --viz-solar-forecast: #FBBF24;
+    --viz-solar-band: rgba(251, 191, 36, 0.18);
+
+    /* EV charging chart colors (dark) */
+    --viz-ev-actual: #A855F7;
+    --viz-ev-forecast: #C084FC;
+    --viz-ev-band: rgba(192, 132, 252, 0.18);
   }
 
   :root[data-theme="light"] {
@@ -92,6 +102,16 @@
     --viz-baseline: #6d28d9;
     --viz-input: #64748b;
     --viz-divider: rgba(30, 41, 59, 0.35);
+
+    /* solar generation chart colors (light) */
+    --viz-solar-actual: #D97706;
+    --viz-solar-forecast: #EAB308;
+    --viz-solar-band: rgba(217, 119, 6, 0.18);
+
+    /* EV charging chart colors (light) */
+    --viz-ev-actual: #7C3AED;
+    --viz-ev-forecast: #9333EA;
+    --viz-ev-band: rgba(124, 58, 237, 0.18);
   }
 
   * {

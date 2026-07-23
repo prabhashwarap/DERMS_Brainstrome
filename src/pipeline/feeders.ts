@@ -19,6 +19,12 @@ export interface Feeder {
   powerFactor: number;
   /** Rooftop solar penetration as a fraction of peak load. */
   solarPenetration: number;
+  /** EV charging penetration as a fraction of peak load. */
+  evPenetration?: number;
+  /** Explicit flag if this feeder/endpoint has solar generation data available. */
+  hasSolar?: boolean;
+  /** Explicit flag if this feeder/endpoint has EV charging data available. */
+  hasEvCharging?: boolean;
   /** Annual load factor (mean load / peak load). */
   loadFactor: number;
   profile: "residential" | "industrial";
@@ -35,6 +41,9 @@ export const FEEDERS: Record<FeederId, Feeder> = {
     capacityMVA: 13,
     powerFactor: 0.95,
     solarPenetration: 0.09,
+    evPenetration: 0.12,
+    hasSolar: true,
+    hasEvCharging: true,
     loadFactor: 0.52,
     profile: "residential",
     mix: "Residential dominated",
@@ -48,6 +57,9 @@ export const FEEDERS: Record<FeederId, Feeder> = {
     capacityMVA: 22,
     powerFactor: 0.95,
     solarPenetration: 0.34,
+    evPenetration: 0.18,
+    hasSolar: true,
+    hasEvCharging: true,
     loadFactor: 0.58,
     profile: "industrial",
     mix: "Industrial + commercial",

@@ -63,6 +63,8 @@ interface Props {
   collapsible?: boolean;
   /** When collapsible, start collapsed. */
   defaultCollapsed?: boolean;
+  /** Color theme variant for the chart. Defaults to "load". */
+  variant?: "load" | "generation" | "ev";
 }
 
 export function buildChartRows(bundle: Bundle, range: RangeKey): ChartRow[] {
@@ -133,6 +135,20 @@ const fmtMW = (v: number) => {
   return v.toFixed(4);
 };
 
+const VARIANT_STYLES: Record<string, React.CSSProperties> = {
+  load: {},
+  generation: {
+    "--viz-actual": "var(--viz-solar-actual)",
+    "--viz-forecast": "var(--viz-solar-forecast)",
+    "--viz-band": "var(--viz-solar-band)",
+  } as React.CSSProperties,
+  ev: {
+    "--viz-actual": "var(--viz-ev-actual)",
+    "--viz-forecast": "var(--viz-ev-forecast)",
+    "--viz-band": "var(--viz-ev-band)",
+  } as React.CSSProperties,
+};
+
 function ForecastChartInner({
   bundle,
   range,
@@ -147,6 +163,7 @@ function ForecastChartInner({
   capacityLabel = "Firm capacity",
   collapsible = false,
   defaultCollapsed = false,
+  variant = "load",
 }: Props) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const rows = useMemo(() => buildChartRows(bundle, range), [bundle, range]);
@@ -160,7 +177,7 @@ function ForecastChartInner({
     0
   );
   const peakNearRightEdge =
-    (bundle.kpis.peakAt - domain[0]) / (domain[1] - domain[0]) > 0.86;
+    (bundle.kpis.peakAt - domain[0]) / (domain[1] - domain[0] || 1) > 0.86;
   const firm = capacityMW(bundle.feeder);
 
   let yMax: number;
@@ -185,7 +202,7 @@ function ForecastChartInner({
   };
 
   return (
-    <Card className="flex flex-col">
+    <Card className="flex flex-col" style={VARIANT_STYLES[variant]}>
       <div className="flex flex-wrap items-start justify-between gap-3 p-4 pb-2">
         <div className="flex items-start gap-2 min-w-0">
           {collapsible && (

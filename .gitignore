@@ -12,6 +12,18 @@ dist
 dist-ssr
 *.local
 
+# Environment / secrets
+.env
+.env.*
+
+# Caches / coverage
+coverage
+.cache
+*.tmp
+
+# graphify: commit the human/agent-readable map, ignore the raw json cache
+.graphify/map.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
