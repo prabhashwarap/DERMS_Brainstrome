@@ -10,6 +10,8 @@
 import {
   QUARTER_MS,
   SLOTS_PER_DAY,
+  WEEKDAYS,
+  getHolidayName,
   isHoliday,
   localParts,
   startOfLocalDay,
@@ -49,12 +51,27 @@ export interface Accuracy {
   holdoutDays: number;
 }
 
+export interface DayTypeInfo {
+  /** High-level classification: "Weekday" | "Saturday" | "Sunday" | "Public Holiday" */
+  type: "Weekday" | "Saturday" | "Sunday" | "Public Holiday";
+  /** Full descriptive name: e.g. "Friday (Weekday)", "Public Holiday (Tamil Thai Pongal)" */
+  label: string;
+  /** Short badge text: e.g. "Weekday (Fri)", "Public Holiday: Tamil Thai Pongal" */
+  badgeText: string;
+  /** Specific day or holiday description: e.g. "Friday" or "Tamil Thai Pongal" */
+  dayName: string;
+  isHoliday: boolean;
+  isOverride: boolean;
+}
+
 export interface Bundle {
   feeder: Feeder;
   /** When the forecast job ran (06:00 LKT). */
   generatedAt: number;
   /** First slot of the forecast horizon. */
   horizonStart: number;
+  /** Day type classification for the prediction horizon. */
+  dayType: DayTypeInfo;
   history: HistoryPoint[];
   forecast: ForecastPoint[];
   accuracy: Accuracy;
@@ -77,6 +94,72 @@ export interface Bundle {
     solarEnergyMWh: number;
     /** Peak instantaneous rooftop PV output over the horizon, MW. */
     solarPeakMW: number;
+  };
+}
+
+/** Derive the day type classification for a forecast horizon. */
+export function deriveDayType(horizonStart: number, overrides?: PredictionOverrides): DayTypeInfo {
+  const hp = localParts(horizonStart);
+
+  if (overrides?.isHoliday === true) {
+    return {
+      type: "Public Holiday",
+      label: "Public Holiday (Override)",
+      badgeText: "Public Holiday (Override)",
+      dayName: "Public Holiday",
+      isHoliday: true,
+      isOverride: true,
+    };
+  }
+
+  const forcedNoHoliday = overrides?.isHoliday === false;
+  const isCalHoliday = !forcedNoHoliday && isHoliday(hp);
+
+  if (isCalHoliday) {
+    const hName = getHolidayName(hp) ?? "Public Holiday";
+    return {
+      type: "Public Holiday",
+      label: `Public Holiday (${hName})`,
+      badgeText: `Public Holiday: ${hName}`,
+      dayName: hName,
+      isHoliday: true,
+      isOverride: false,
+    };
+  }
+
+  const weekday = overrides?.weekday != null ? overrides.weekday : hp.weekday;
+  const isOverride = overrides?.weekday != null || forcedNoHoliday;
+
+  if (weekday === 0) {
+    return {
+      type: "Sunday",
+      label: isOverride ? "Sunday (Override)" : "Sunday (Weekend)",
+      badgeText: isOverride ? "Sunday (Override)" : "Sunday (Weekend)",
+      dayName: "Sunday",
+      isHoliday: false,
+      isOverride,
+    };
+  }
+
+  if (weekday === 6) {
+    return {
+      type: "Saturday",
+      label: isOverride ? "Saturday (Override)" : "Saturday (Weekend)",
+      badgeText: isOverride ? "Saturday (Override)" : "Saturday (Weekend)",
+      dayName: "Saturday",
+      isHoliday: false,
+      isOverride,
+    };
+  }
+
+  const weekdayName = WEEKDAYS[weekday] ?? "Weekday";
+  return {
+    type: "Weekday",
+    label: `${weekdayName} (Weekday${isOverride ? " Override" : ""})`,
+    badgeText: `Weekday (${weekdayName}${isOverride ? "*" : ""})`,
+    dayName: weekdayName,
+    isHoliday: false,
+    isOverride,
   };
 }
 
@@ -164,10 +247,13 @@ export function runForecast(feeder: Feeder, now: number, overrides?: PredictionO
     });
   }
 
+  const dayType = deriveDayType(horizonStart, overrides);
+
   return {
     feeder,
     generatedAt,
     horizonStart,
+    dayType,
     history,
     forecast,
     accuracy: { mape, baselineMape, maeMW, holdoutDays },

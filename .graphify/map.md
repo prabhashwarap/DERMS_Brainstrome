@@ -1,6 +1,6 @@
 # Code Map (graphify)
 
-_30 files · 93 exported symbols · regenerate with `npm run graphify`._
+_31 files · 98 exported symbols · regenerate with `npm run graphify`._
 
 Read this map to locate code, then open only the file(s) you need. Signatures are compact (params + annotated return type); tags like `[memo]` note wrappers.
 
@@ -34,7 +34,7 @@ Read this map to locate code, then open only the file(s) you need. Signatures ar
 - ForecastTable({ bundle, showGeneration = false, }: { bundle: Bundle; showGeneration?: boolean; })  [memo]
 
 ## src/components/ForecastToolbar.tsx
-- ForecastToolbar({ feederId, onFeederChange, generatedAt }: Props)
+- ForecastToolbar({ feederId, onFeederChange, bundle }: Props)
 
 ## src/components/GenerationEvCharts.tsx
 - GenerationEvCharts({ bundle }: Props)
@@ -92,6 +92,9 @@ Read this map to locate code, then open only the file(s) you need. Signatures ar
 - ↳ TooltipContent
 - ↳ TooltipProvider
 
+## src/lib/useTheme.ts
+- fn useTheme(): "dark" | "light"
+
 ## src/lib/utils.ts
 - fn cn(...inputs: ClassValue[])
 - fn formatPower(valMW: number): { value: string; unit: string; full: string }
@@ -104,6 +107,8 @@ Read this map to locate code, then open only the file(s) you need. Signatures ar
 - fn formatLKT(ts: number, opts: { date?: boolean; time?: boolean })
 - const MONTHS
 - const WEEKDAYS
+- const HOLIDAY_MAP
+- fn getHolidayName(p: LocalParts): string | null
 - fn isHoliday(p: LocalParts): boolean
 - const QUARTER_MS
 - const SLOTS_PER_DAY
@@ -131,7 +136,9 @@ Read this map to locate code, then open only the file(s) you need. Signatures ar
 - interface ForecastPoint
 - interface HistoryPoint
 - interface Accuracy
+- interface DayTypeInfo
 - interface Bundle
+- fn deriveDayType(horizonStart: number, overrides?: PredictionOverrides): DayTypeInfo
 - const RUN_HOUR
 - interface PredictionOverrides
 - fn runForecast(feeder: Feeder, now: number, overrides?: PredictionOverrides): Bundle

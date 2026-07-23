@@ -76,7 +76,7 @@ export default function App() {
           <ForecastToolbar
             feederId={feederId}
             onFeederChange={setFeederId}
-            generatedAt={bundle.generatedAt}
+            bundle={bundle}
           />
 
           <KpiRow bundle={bundle} />

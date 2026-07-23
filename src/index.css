@@ -143,3 +143,45 @@
 .recharts-surface:focus {
   outline: none;
 }
+
+/*
+ * Leaflet dark mode. Leaflet renders popups, zoom controls and the attribution
+ * bar with its own hard-coded white styling, outside the Tailwind token system.
+ * In dark mode those read as bright rectangles floating over the Dark Matter
+ * basemap, so we restep them onto the same design tokens as the rest of the UI.
+ */
+:root[data-theme="dark"] .leaflet-container {
+  /* Backdrop shown behind tiles while they load / at the map edges. */
+  background: #0b0e1a;
+}
+
+:root[data-theme="dark"] .leaflet-popup-content-wrapper,
+:root[data-theme="dark"] .leaflet-popup-tip {
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+}
+
+:root[data-theme="dark"] .leaflet-popup-close-button {
+  color: hsl(var(--muted-foreground));
+}
+
+:root[data-theme="dark"] .leaflet-bar a,
+:root[data-theme="dark"] .leaflet-bar a:hover {
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  border-color: hsl(var(--border));
+}
+
+:root[data-theme="dark"] .leaflet-bar a:hover {
+  background: hsl(var(--accent));
+}
+
+:root[data-theme="dark"] .leaflet-control-attribution {
+  background: hsl(var(--card) / 0.85);
+  color: hsl(var(--muted-foreground));
+}
+
+:root[data-theme="dark"] .leaflet-control-attribution a {
+  color: hsl(var(--primary-foreground));
+}

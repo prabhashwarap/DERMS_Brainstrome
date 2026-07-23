@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from "react";
 import { NodeDetailPanel, lecoAccountNumber, type MapNodeDetails } from "./NodeDetailPanel";
 import { Badge } from "@/components/ui/badge";
 import { formatPower, formatEnergy } from "@/lib/utils";
+import { useTheme } from "@/lib/useTheme";
 import {
   Zap,
   Cable,
@@ -524,6 +525,7 @@ function ZoomWatcher({ onZoom }: { onZoom: (z: number) => void }) {
 }
 
 export function ForecastPlusMap() {
+  const theme = useTheme();
   const [branch, setBranch] = useState("moratuwa");
   const [csc, setCsc] = useState("moratuwa_north");
   const [feeder, setFeeder] = useState("angulana");
@@ -1576,7 +1578,7 @@ export function ForecastPlusMap() {
                 <CircleMarker
                   center={c.pos}
                   radius={4.5}
-                  pathOptions={{ color: '#ffffff', fillColor: '#0f172a', fillOpacity: opacityFor(c.id), opacity: opacityFor(c.id), weight: 1.5 }}
+                  pathOptions={{ color: theme === "dark" ? '#0b0e1a' : '#ffffff', fillColor: theme === "dark" ? '#e2e8f0' : '#0f172a', fillOpacity: opacityFor(c.id), opacity: opacityFor(c.id), weight: 1.5 }}
                   eventHandlers={{ click: () => setSelectedNode(meterNode), ...hoverProps(c.id) }}
                 >
                   <Popup>
@@ -1664,7 +1666,7 @@ export function ForecastPlusMap() {
       </>
       );
     },
-    [layers, orgMarkers, scopeSites, baseGrid, roadRoutes, consumers, hoveredId]
+    [layers, orgMarkers, scopeSites, baseGrid, roadRoutes, consumers, hoveredId, theme]
   );
 
   return (
@@ -1893,10 +1895,17 @@ export function ForecastPlusMap() {
             <MapView sites={scopeCenters} center={mapCenter} zoom={mapZoom} searchFocus={searchFocus} />
             <ZoomWatcher onZoom={setLiveZoom} />
 
-            {/* Carto Positron Crisp Light Tile Layer */}
+            {/* Carto basemap — Positron in light, Dark Matter in dark. The key
+                forces a tile-layer remount so the URL actually swaps on theme
+                change (react-leaflet does not treat `url` as reactive). */}
             <TileLayer
+              key={theme}
               attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-              url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+              url={
+                theme === "dark"
+                  ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                  : "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+              }
               maxZoom={19}
             />
 

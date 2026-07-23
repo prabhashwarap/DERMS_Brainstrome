@@ -214,7 +214,7 @@ function ForecastChartInner({
           <div className="min-w-0">
             <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
             <p className="text-xs text-muted-foreground">
-              {subtitle ?? `${bundle.feeder.name} · 15-minute resolution · MW · Asia/Colombo`}
+              {subtitle ?? `${bundle.feeder.name} · Day Type: ${bundle.dayType.label} · 15-minute resolution · MW · Asia/Colombo`}
             </p>
           </div>
         </div>

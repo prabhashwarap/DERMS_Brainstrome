@@ -73,32 +73,34 @@ export const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
  * production build would read these from an authoritative table; for the demo
  * we carry the mercantile + public holiday set for the covered window.
  */
-const HOLIDAYS_MMDD = [
-  "01-14", // Tamil Thai Pongal
-  "01-15", // Duruthu Poya
-  "02-04", // Independence Day
-  "02-13", // Navam Poya
-  "03-14", // Medin Poya
-  "04-13", // Sinhala & Tamil New Year Eve
-  "04-14", // Sinhala & Tamil New Year
-  "04-12", // Bak Poya
-  "05-01", // May Day
-  "05-11", // Vesak Poya
-  "05-12", // Day after Vesak
-  "06-10", // Poson Poya
-  "07-09", // Esala Poya
-  "08-08", // Nikini Poya
-  "09-06", // Binara Poya
-  "10-06", // Vap Poya
-  "11-04", // Il Poya
-  "12-04", // Unduvap Poya
-  "12-25", // Christmas
-];
+export const HOLIDAY_MAP: Record<string, string> = {
+  "01-14": "Tamil Thai Pongal",
+  "01-15": "Duruthu Poya",
+  "02-04": "Independence Day",
+  "02-13": "Navam Poya",
+  "03-14": "Medin Poya",
+  "04-12": "Bak Poya",
+  "04-13": "Sinhala & Tamil New Year Eve",
+  "04-14": "Sinhala & Tamil New Year",
+  "05-01": "May Day",
+  "05-11": "Vesak Poya",
+  "05-12": "Day after Vesak",
+  "06-10": "Poson Poya",
+  "07-09": "Esala Poya",
+  "08-08": "Nikini Poya",
+  "09-06": "Binara Poya",
+  "10-06": "Vap Poya",
+  "11-04": "Il Poya",
+  "12-04": "Unduvap Poya",
+  "12-25": "Christmas",
+};
 
-const HOLIDAY_SET = new Set(HOLIDAYS_MMDD);
+export function getHolidayName(p: LocalParts): string | null {
+  return HOLIDAY_MAP[`${pad(p.month)}-${pad(p.day)}`] ?? null;
+}
 
 export function isHoliday(p: LocalParts): boolean {
-  return HOLIDAY_SET.has(`${pad(p.month)}-${pad(p.day)}`);
+  return `${pad(p.month)}-${pad(p.day)}` in HOLIDAY_MAP;
 }
 
 export const QUARTER_MS = 15 * 60_000;

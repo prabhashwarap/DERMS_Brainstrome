@@ -206,7 +206,8 @@ function WeatherCard({
 
         <p className="text-xs leading-normal text-muted-foreground">
           Driver: {highSolar ? "Cloud cover & PV ramp" : "Cooling load & temp"}. Max:{" "}
-          <span className="tnum font-medium text-foreground">{peakTemp.tempC.toFixed(1)} °C</span> ({formatLKT(peakTemp.ts)}).
+          <span className="tnum font-medium text-foreground">{peakTemp.tempC.toFixed(1)} °C</span> ({formatLKT(peakTemp.ts)}). Day Type:{" "}
+          <span className="font-medium text-foreground">{bundle.dayType.badgeText}</span>.
         </p>
       </CardContent>
     </Card>
@@ -276,6 +277,13 @@ const FeederCard = memo(function FeederCard({ bundle }: { bundle: Bundle }) {
   }
 
   rows.push(["Firm Capacity", `${capStr} (${formattedCap})`]);
+
+  rows.push([
+    "Prediction Day Type",
+    <span key="dayType" className="tnum font-medium text-primary">
+      {bundle.dayType.label}
+    </span>,
+  ]);
 
   rows.push([
     "Accuracy (28d)",
