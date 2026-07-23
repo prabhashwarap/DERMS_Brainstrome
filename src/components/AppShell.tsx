@@ -63,6 +63,7 @@ export function AppShell({ title, theme, activeNav, onNavChange, onThemeChange, 
         <TopBar
           title={title}
           theme={theme}
+          activeNav={activeNav}
           onThemeChange={onThemeChange}
           onToggleSidebar={() => setOpen((v) => !v)}
           onConfigToggle={onConfigToggle}
@@ -168,12 +169,14 @@ function Sidebar({ open, onClose, activeNav, onNavChange }: { open: boolean; onC
 function TopBar({
   title,
   theme,
+  activeNav,
   onThemeChange,
   onToggleSidebar,
   onConfigToggle,
 }: {
   title: string;
   theme: "dark" | "light";
+  activeNav: NavId;
   onThemeChange: (t: "dark" | "light") => void;
   onToggleSidebar: () => void;
   onConfigToggle: () => void;
@@ -214,14 +217,16 @@ function TopBar({
           <TooltipContent>Alerting arrives after v1 - space reserved.</TooltipContent>
         </Tooltip>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" onClick={onConfigToggle} aria-label="Open configuration">
-              <Settings className="h-5 w-5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Configuration</TooltipContent>
-        </Tooltip>
+        {activeNav !== "forecastPlus" && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={onConfigToggle} aria-label="Open configuration">
+                <Settings className="h-5 w-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Configuration</TooltipContent>
+          </Tooltip>
+        )}
 
         <div className="flex items-center gap-3 pl-1">
           <span
