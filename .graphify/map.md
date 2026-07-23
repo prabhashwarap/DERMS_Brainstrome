@@ -1,6 +1,6 @@
 # Code Map (graphify)
 
-_30 files · 90 exported symbols · regenerate with `npm run graphify`._
+_30 files · 91 exported symbols · regenerate with `npm run graphify`._
 
 Read this map to locate code, then open only the file(s) you need. Signatures are compact (params + annotated return type); tags like `[memo]` note wrappers.
 
@@ -47,6 +47,7 @@ Read this map to locate code, then open only the file(s) you need. Signatures ar
 
 ## src/components/NodeDetailPanel.tsx
 - interface MapNodeDetails
+- fn lecoAccountNumber(nodeId: string): string
 - NodeDetailPanel({ node, onClose, onFilterToNode }: NodeDetailPanelProps)
 
 ## src/components/ui/badge.tsx

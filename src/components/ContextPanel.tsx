@@ -15,6 +15,53 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { formatLKT, localParts } from "@/pipeline/calendar";
 import { capacityMW } from "@/pipeline/feeders";
 import type { Bundle } from "@/pipeline/forecast";
+import { cn } from "@/lib/utils";
+
+/**
+ * The grid path as an indented tree: Branch → CSC → Substation → Feeder →
+ * Transformer → Consumer, one level per row. Reads far better in the narrow
+ * context panel than a wrapping "A → B → C" breadcrumb, and the depth of each
+ * node is legible at a glance. The last node (the one in focus) is emphasised.
+ */
+function HierarchyTrail({ nodes }: { nodes: Array<{ type: string; name: string }> }) {
+  return (
+    <div className="flex flex-col gap-1">
+      {nodes.map((n, i) => {
+        const isLast = i === nodes.length - 1;
+        return (
+          <div
+            key={`${n.type}-${i}`}
+            className="flex min-w-0 items-center gap-1.5"
+            style={{ paddingLeft: i > 0 ? (i - 1) * 14 + 2 : 0 }}
+          >
+            {i > 0 && (
+              <span className="select-none text-[11px] leading-none text-muted-foreground/50">
+                └
+              </span>
+            )}
+            <span
+              className={cn(
+                "h-1.5 w-1.5 shrink-0 rounded-full",
+                isLast ? "bg-primary" : "bg-muted-foreground/40"
+              )}
+            />
+            <span className="shrink-0 text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
+              {n.type}
+            </span>
+            <span
+              className={cn(
+                "truncate text-[11px] leading-tight",
+                isLast ? "font-semibold text-foreground" : "text-foreground/75"
+              )}
+            >
+              {n.name}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 /** Adaptive power formatting by magnitude. */
 const mw = (v: number) => {
@@ -188,19 +235,23 @@ const FeederCard = memo(function FeederCard({ bundle }: { bundle: Bundle }) {
   const solarVal = firmMW >= 1 ? (firmMW * f.solarPenetration).toFixed(2) + " MW" : ((firmMW * f.solarPenetration) * 1000).toFixed(1) + " kW";
   const evVal = f.evPenetration ? (firmMW >= 1 ? (firmMW * f.evPenetration).toFixed(2) + " MW" : ((firmMW * f.evPenetration) * 1000).toFixed(1) + " kW") : null;
 
-  // Build hierarchy connection breadcrumb: Branch -> CSC -> Substation -> Feeder -> Transformer -> Consumer
-  const hierarchyParts: string[] = [];
-  if (f.branchName) hierarchyParts.push(f.branchName.endsWith("Branch") ? f.branchName : `${f.branchName} Branch`);
-  if (f.cscName) hierarchyParts.push(f.cscName.endsWith("CSC") ? f.cscName : `${f.cscName} CSC`);
-  if (f.substationName) hierarchyParts.push(f.substationName.endsWith("Substation") ? f.substationName : `${f.substationName} Substation`);
+  // Build the grid path: Branch -> CSC -> Substation -> Feeder -> Transformer
+  // -> Consumer. The type is shown as its own label, so strip a redundant
+  // trailing type word from the name ("Angulana Substation" -> "Angulana").
+  const stripType = (name: string, type: string) =>
+    name.replace(new RegExp(`\\s*${type}$`, "i"), "").trim() || name;
+  const hierarchyNodes: Array<{ type: string; name: string }> = [];
+  if (f.branchName) hierarchyNodes.push({ type: "Branch", name: stripType(f.branchName, "Branch") });
+  if (f.cscName) hierarchyNodes.push({ type: "CSC", name: stripType(f.cscName, "CSC") });
+  if (f.substationName) hierarchyNodes.push({ type: "Substation", name: stripType(f.substationName, "Substation") });
   if (f.feederName && f.nodeType !== "substation" && f.nodeType !== "csc" && f.nodeType !== "branch") {
-    hierarchyParts.push(f.feederName.endsWith("Feeder") ? f.feederName : `${f.feederName} Feeder`);
+    hierarchyNodes.push({ type: "Feeder", name: stripType(f.feederName, "Feeder") });
   }
   if (f.transformerName && (f.nodeType === "transformer" || f.nodeType === "meterEndpoint" || f.nodeType === "distributedSolar" || f.nodeType === "evse" || f.nodeType === "distributedBattery")) {
-    hierarchyParts.push(f.transformerName);
+    hierarchyNodes.push({ type: "Transformer", name: f.transformerName });
   }
   if (f.consumerName && (f.nodeType === "meterEndpoint" || f.nodeType === "distributedSolar" || f.nodeType === "evse" || f.nodeType === "distributedBattery")) {
-    hierarchyParts.push(f.consumerName);
+    hierarchyNodes.push({ type: "Consumer", name: f.consumerName });
   }
 
   // Dynamic Card Title based on Node Type
@@ -226,14 +277,7 @@ const FeederCard = memo(function FeederCard({ bundle }: { bundle: Bundle }) {
 
   const rows: Array<[string, React.ReactNode]> = [];
 
-  if (hierarchyParts.length > 0) {
-    rows.push([
-      "Hierarchy",
-      <span key="hierarchy" className="text-[11px] font-medium text-foreground leading-tight block">
-        {hierarchyParts.join(" → ")}
-      </span>,
-    ]);
-  } else {
+  if (hierarchyNodes.length === 0) {
     rows.push(["Substation", `${f.substation}`]);
   }
 
@@ -320,7 +364,15 @@ const FeederCard = memo(function FeederCard({ bundle }: { bundle: Bundle }) {
           </Badge>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-3">
+        {hierarchyNodes.length > 0 && (
+          <div className="rounded-md border border-border/60 bg-muted/30 p-2.5">
+            <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              Grid path
+            </div>
+            <HierarchyTrail nodes={hierarchyNodes} />
+          </div>
+        )}
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-xs">
           {rows.map(([k, v]) => (
             <div key={k} className="contents">

@@ -68,6 +68,23 @@ function hashStr(s: string): number {
   return h;
 }
 
+/**
+ * A meter endpoint's unique identifier is its LECO account number. Derive a
+ * stable, realistic 10-digit account number from the node id so the same meter
+ * always shows the same number wherever it appears (map popup, search, detail
+ * panel). When the live asset register lands, this is the single place that
+ * swaps a lookup for the real account number.
+ */
+export function lecoAccountNumber(nodeId: string): string {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < nodeId.length; i++) {
+    h = Math.imul(h ^ nodeId.charCodeAt(i), 16777619) >>> 0;
+  }
+  const hi = (h % 90000) + 10000; // 5 digits, non-zero lead
+  const lo = (h >>> 7) % 100000; // 5 digits
+  return `${hi}${lo.toString().padStart(5, "0")}`;
+}
+
 const TYPE_CONFIG: Record<
   MapNodeDetails["type"],
   { icon: typeof Zap; colorClass: string; bgClass: string; borderClass: string }
@@ -332,6 +349,9 @@ export function NodeDetailPanel({ node, onClose, onFilterToNode }: NodeDetailPan
   const typeMeta = TYPE_CONFIG[node.type] || TYPE_CONFIG.feeder;
   const TypeIcon = typeMeta.icon;
 
+  // For meter endpoints the unique identifier is the LECO account number.
+  const accountNo = node.type === "meterEndpoint" ? lecoAccountNumber(node.id) : null;
+
   return (
     <aside className="flex flex-col w-full h-full bg-background overflow-hidden">
       
@@ -346,8 +366,12 @@ export function NodeDetailPanel({ node, onClose, onFilterToNode }: NodeDetailPan
               <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 {node.typeName}
               </span>
-              <Badge variant="outline" className="text-[10px] uppercase font-mono">
-                {node.id}
+              <Badge
+                variant="outline"
+                className="text-[10px] uppercase font-mono"
+                title={accountNo ? "LECO account number" : undefined}
+              >
+                {accountNo ? `LECO A/C ${accountNo}` : node.id}
               </Badge>
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />

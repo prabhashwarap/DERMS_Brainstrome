@@ -1,5 +1,6 @@
-import React, { useState, useMemo, useEffect } from "react";
-import { NodeDetailPanel, type MapNodeDetails } from "./NodeDetailPanel";
+import React, { useState, useMemo, useEffect, useRef } from "react";
+import { NodeDetailPanel, lecoAccountNumber, type MapNodeDetails } from "./NodeDetailPanel";
+import { Badge } from "@/components/ui/badge";
 import {
   Zap,
   Cable,
@@ -18,7 +19,12 @@ import {
   Waypoints,
   ChevronDown,
   ChevronRight,
-  Layers
+  Layers,
+  Search,
+  X,
+  RotateCcw,
+  Sparkles,
+  Filter,
 } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup, CircleMarker, Polyline, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
@@ -50,12 +56,10 @@ const branchHqIcon = createCustomIcon(<Building2 className="w-4 h-4 text-indigo-
 const cscHqIcon = createCustomIcon(<Building className="w-3.5 h-3.5 text-cyan-700" />, "border-cyan-600 bg-cyan-50", 24);
 const feederIcon = createCustomIcon(<Waypoints className="w-3.5 h-3.5 text-rose-600" />, "border-rose-500 bg-rose-50", 20);
 
-// LECO Grid Hierarchy: Branch -> CSC (Consumer Service Center) -> Feeder
-// Source: Lanka Electricity Company (LECO) branch/CSC network (leco.lk).
 // LECO Grid Hierarchy: Branch -> CSC (Consumer Service Center) -> Substation -> Feeder -> Transformer -> Consumer
 // Source: Lanka Electricity Company (LECO) branch/CSC network (leco.lk).
 // LECO operates 7 branches covering the urban Western & Southern coastal belt.
-type Feeder = { id: string; name: string };
+type Feeder = { id: string; name: string; center?: [number, number] };
 type Csc = { id: string; name: string; center: [number, number]; substationName: string; feeders: Feeder[] };
 type Branch = { id: string; name: string; center: [number, number]; cscs: Csc[] };
 
@@ -64,73 +68,280 @@ const LECO_DATA: { branches: Branch[] } = {
     {
       id: "kotte",
       name: "Kotte",
-      center: [6.9089, 79.8936],
+      center: [6.8912, 79.8995],
       cscs: [
-        { id: "pitakotte", name: "Pita Kotte", center: [6.8869, 79.9036], substationName: "Pita Kotte Substation", feeders: [{ id: "pitakotte_f1", name: "Pita Kotte" }, { id: "pitakotte_f2", name: "Nawala" }] },
-        { id: "kolonnawa", name: "Kolonnawa", center: [6.9333, 79.8853], substationName: "Kolonnawa Substation", feeders: [{ id: "kolonnawa_f1", name: "Kolonnawa" }, { id: "kolonnawa_f2", name: "Wellampitiya" }] },
-        { id: "kotikawatta", name: "Kotikawatta", center: [6.9430, 79.8994], substationName: "Kotikawatta Substation", feeders: [{ id: "kotikawatta_f1", name: "Kotikawatta" }, { id: "kotikawatta_f2", name: "Angoda" }] },
+        {
+          id: "pitakotte",
+          name: "Pita Kotte",
+          center: [6.8855, 79.9030],
+          substationName: "Pita Kotte Substation",
+          feeders: [
+            { id: "pitakotte_f1", name: "Pita Kotte", center: [6.8840, 79.9055] },
+            { id: "pitakotte_f2", name: "Nawala", center: [6.8895, 79.8915] },
+          ],
+        },
+        {
+          id: "kolonnawa",
+          name: "Kolonnawa",
+          center: [6.9295, 79.8860],
+          substationName: "Kolonnawa Substation",
+          feeders: [
+            { id: "kolonnawa_f1", name: "Kolonnawa", center: [6.9315, 79.8875] },
+            { id: "kolonnawa_f2", name: "Wellampitiya", center: [6.9405, 79.8830] },
+          ],
+        },
+        {
+          id: "kotikawatta",
+          name: "Kotikawatta",
+          center: [6.9380, 79.9120],
+          substationName: "Kotikawatta Substation",
+          feeders: [
+            { id: "kotikawatta_f1", name: "Kotikawatta", center: [6.9390, 79.9135] },
+            { id: "kotikawatta_f2", name: "Angoda", center: [6.9280, 79.9250] },
+          ],
+        },
       ],
     },
     {
       id: "nugegoda",
       name: "Nugegoda",
-      center: [6.8649, 79.8990],
+      center: [6.8685, 79.8975],
       cscs: [
-        { id: "boralesgamuwa", name: "Boralesgamuwa", center: [6.8411, 79.9020], substationName: "Boralesgamuwa Substation", feeders: [{ id: "boralesgamuwa_f1", name: "Boralesgamuwa" }, { id: "boralesgamuwa_f2", name: "Katuwawala" }] },
-        { id: "nugegoda_csc", name: "Nugegoda", center: [6.8724, 79.8890], substationName: "Nugegoda Substation", feeders: [{ id: "nugegoda_f1", name: "Nugegoda Town" }, { id: "nugegoda_f2", name: "Delkanda" }] },
-        { id: "maharagama", name: "Maharagama", center: [6.8480, 79.9265], substationName: "Maharagama Substation", feeders: [{ id: "maharagama_f1", name: "Maharagama" }, { id: "maharagama_f2", name: "Pannipitiya" }] },
+        {
+          id: "boralesgamuwa",
+          name: "Boralesgamuwa",
+          center: [6.8390, 79.9015],
+          substationName: "Boralesgamuwa Substation",
+          feeders: [
+            { id: "boralesgamuwa_f1", name: "Boralesgamuwa", center: [6.8405, 79.9030] },
+            { id: "boralesgamuwa_f2", name: "Katuwawala", center: [6.8310, 79.9090] },
+          ],
+        },
+        {
+          id: "nugegoda_csc",
+          name: "Nugegoda",
+          center: [6.8710, 79.8910],
+          substationName: "Nugegoda Substation",
+          feeders: [
+            { id: "nugegoda_f1", name: "Nugegoda Town", center: [6.8690, 79.8935] },
+            { id: "nugegoda_f2", name: "Delkanda", center: [6.8580, 79.8995] },
+          ],
+        },
+        {
+          id: "maharagama",
+          name: "Maharagama",
+          center: [6.8465, 79.9260],
+          substationName: "Maharagama Substation",
+          feeders: [
+            { id: "maharagama_f1", name: "Maharagama", center: [6.8475, 79.9285] },
+            { id: "maharagama_f2", name: "Pannipitiya", center: [6.8430, 79.9480] },
+          ],
+        },
       ],
     },
     {
       id: "kelaniya",
       name: "Kelaniya",
-      center: [6.9614, 79.9186],
+      center: [6.9600, 79.9160],
       cscs: [
-        { id: "dalugama", name: "Dalugama", center: [6.9614, 79.9186], substationName: "Dalugama Substation", feeders: [{ id: "dalugama_f1", name: "Dalugama" }, { id: "dalugama_f2", name: "Kiribathgoda" }] },
-        { id: "mahara", name: "Mahara", center: [7.0130, 79.9490], substationName: "Mahara Substation", feeders: [{ id: "mahara_f1", name: "Mahara" }, { id: "mahara_f2", name: "Kadawatha" }] },
-        { id: "kandana", name: "Kandana", center: [7.0470, 79.8940], substationName: "Kandana Substation", feeders: [{ id: "kandana_f1", name: "Kandana" }, { id: "kandana_f2", name: "Ragama" }] },
-        { id: "wattala", name: "Wattala", center: [6.9892, 79.8925], substationName: "Wattala Substation", feeders: [{ id: "wattala_f1", name: "Wattala" }, { id: "wattala_f2", name: "Hendala" }] },
+        {
+          id: "dalugama",
+          name: "Dalugama",
+          center: [6.9635, 79.9180],
+          substationName: "Dalugama Substation",
+          feeders: [
+            { id: "dalugama_f1", name: "Dalugama", center: [6.9645, 79.9195] },
+            { id: "dalugama_f2", name: "Kiribathgoda", center: [6.9740, 79.9280] },
+          ],
+        },
+        {
+          id: "mahara",
+          name: "Mahara",
+          center: [7.0090, 79.9510],
+          substationName: "Mahara Substation",
+          feeders: [
+            { id: "mahara_f1", name: "Mahara", center: [7.0110, 79.9525] },
+            { id: "mahara_f2", name: "Kadawatha", center: [7.0020, 79.9535] },
+          ],
+        },
+        {
+          id: "kandana",
+          name: "Kandana",
+          center: [7.0460, 79.8970],
+          substationName: "Kandana Substation",
+          feeders: [
+            { id: "kandana_f1", name: "Kandana", center: [7.0470, 79.8985] },
+            { id: "kandana_f2", name: "Ragama", center: [7.0280, 79.9210] },
+          ],
+        },
+        {
+          id: "wattala",
+          name: "Wattala",
+          center: [6.9880, 79.8920],
+          substationName: "Wattala Substation",
+          feeders: [
+            { id: "wattala_f1", name: "Wattala", center: [6.9890, 79.8935] },
+            { id: "wattala_f2", name: "Hendala", center: [6.9830, 79.8820] },
+          ],
+        },
       ],
     },
     {
       id: "moratuwa",
       name: "Moratuwa",
-      center: [6.7730, 79.8820],
+      center: [6.7758, 79.8814],
       cscs: [
-        { id: "moratuwa_north", name: "Moratuwa North", center: [6.7900, 79.8860], substationName: "Angulana Substation", feeders: [{ id: "moratuwa_north_f1", name: "Rawatawatta" }, { id: "moratuwa_north_f2", name: "Angulana" }] },
-        { id: "moratuwa_south", name: "Moratuwa South", center: [6.7600, 79.8810], substationName: "Moratuwa South Substation", feeders: [{ id: "moratuwa_south_f1", name: "Katubedda" }, { id: "moratuwa_south_f2", name: "Koralawella" }] },
-        { id: "keselwatta", name: "Keselwatta", center: [6.7150, 79.9010], substationName: "Keselwatta Substation", feeders: [{ id: "keselwatta_f1", name: "Keselwatta" }, { id: "keselwatta_f2", name: "Wekada" }] },
-        { id: "panadura", name: "Panadura", center: [6.7130, 79.9070], substationName: "Panadura Substation", feeders: [{ id: "panadura_f1", name: "Panadura Town" }, { id: "panadura_f2", name: "Walana" }] },
+        {
+          id: "moratuwa_north",
+          name: "Moratuwa North",
+          center: [6.8042, 79.8785],
+          substationName: "Angulana Substation",
+          feeders: [
+            { id: "moratuwa_north_f1", name: "Rawatawatta", center: [6.7865, 79.8850] },
+            { id: "moratuwa_north_f2", name: "Angulana", center: [6.8020, 79.8770] },
+          ],
+        },
+        {
+          id: "moratuwa_south",
+          name: "Moratuwa South",
+          center: [6.7610, 79.8875],
+          substationName: "Moratuwa South Substation",
+          feeders: [
+            { id: "moratuwa_south_f1", name: "Katubedda", center: [6.7970, 79.9010] },
+            { id: "moratuwa_south_f2", name: "Koralawella", center: [6.7485, 79.8890] },
+          ],
+        },
+        {
+          id: "keselwatta",
+          name: "Keselwatta",
+          center: [6.7350, 79.9040],
+          substationName: "Keselwatta Substation",
+          feeders: [
+            { id: "keselwatta_f1", name: "Keselwatta", center: [6.7360, 79.9025] },
+            { id: "keselwatta_f2", name: "Wekada", center: [6.7230, 79.9080] },
+          ],
+        },
+        {
+          id: "panadura",
+          name: "Panadura",
+          center: [6.7135, 79.9065],
+          substationName: "Panadura Substation",
+          feeders: [
+            { id: "panadura_f1", name: "Panadura Town", center: [6.7145, 79.9050] },
+            { id: "panadura_f2", name: "Walana", center: [6.7260, 79.9160] },
+          ],
+        },
       ],
     },
     {
       id: "kalutara",
       name: "Kalutara",
-      center: [6.5854, 79.9607],
+      center: [6.5840, 79.9610],
       cscs: [
-        { id: "payagala", name: "Payagala", center: [6.5170, 79.9800], substationName: "Payagala Substation", feeders: [{ id: "payagala_f1", name: "Payagala" }, { id: "payagala_f2", name: "Maggona" }] },
-        { id: "kalutara_csc", name: "Kalutara", center: [6.5854, 79.9607], substationName: "Kalutara Substation", feeders: [{ id: "kalutara_f1", name: "Kalutara North" }, { id: "kalutara_f2", name: "Kalutara South" }] },
-        { id: "aluthgama", name: "Aluthgama", center: [6.4310, 79.9970], substationName: "Aluthgama Substation", feeders: [{ id: "aluthgama_f1", name: "Aluthgama" }, { id: "aluthgama_f2", name: "Beruwala" }] },
+        {
+          id: "payagala",
+          name: "Payagala",
+          center: [6.5180, 79.9790],
+          substationName: "Payagala Substation",
+          feeders: [
+            { id: "payagala_f1", name: "Payagala", center: [6.5190, 79.9805] },
+            { id: "payagala_f2", name: "Maggona", center: [6.4980, 79.9880] },
+          ],
+        },
+        {
+          id: "kalutara_csc",
+          name: "Kalutara",
+          center: [6.5855, 79.9620],
+          substationName: "Kalutara Substation",
+          feeders: [
+            { id: "kalutara_f1", name: "Kalutara North", center: [6.5980, 79.9570] },
+            { id: "kalutara_f2", name: "Kalutara South", center: [6.5740, 79.9660] },
+          ],
+        },
+        {
+          id: "aluthgama",
+          name: "Aluthgama",
+          center: [6.4320, 79.9980],
+          substationName: "Aluthgama Substation",
+          feeders: [
+            { id: "aluthgama_f1", name: "Aluthgama", center: [6.4330, 79.9995] },
+            { id: "aluthgama_f2", name: "Beruwala", center: [6.4780, 79.9830] },
+          ],
+        },
       ],
     },
     {
       id: "negombo",
       name: "Negombo",
-      center: [7.2083, 79.8358],
+      center: [7.2090, 79.8370],
       cscs: [
-        { id: "negombo_csc", name: "Negombo", center: [7.2083, 79.8358], substationName: "Negombo Substation", feeders: [{ id: "negombo_f1", name: "Negombo Town" }, { id: "negombo_f2", name: "Kochchikade" }] },
-        { id: "seeduwa", name: "Seeduwa", center: [7.1400, 79.8770], substationName: "Katunayake Substation", feeders: [{ id: "seeduwa_f1", name: "Seeduwa" }, { id: "seeduwa_f2", name: "Katunayake" }] },
-        { id: "jaela", name: "Ja-Ela", center: [7.0744, 79.8920], substationName: "Ja-Ela Substation", feeders: [{ id: "jaela_f1", name: "Ja-Ela" }, { id: "jaela_f2", name: "Ekala" }] },
+        {
+          id: "negombo_csc",
+          name: "Negombo",
+          center: [7.2105, 79.8390],
+          substationName: "Negombo Substation",
+          feeders: [
+            { id: "negombo_f1", name: "Negombo Town", center: [7.2115, 79.8380] },
+            { id: "negombo_f2", name: "Kochchikade", center: [7.2650, 79.8510] },
+          ],
+        },
+        {
+          id: "seeduwa",
+          name: "Seeduwa",
+          center: [7.1700, 79.8850],
+          substationName: "Katunayake Substation",
+          feeders: [
+            { id: "seeduwa_f1", name: "Seeduwa", center: [7.1430, 79.8810] },
+            { id: "seeduwa_f2", name: "Katunayake", center: [7.1720, 79.8870] },
+          ],
+        },
+        {
+          id: "jaela",
+          name: "Ja-Ela",
+          center: [7.0740, 79.8930],
+          substationName: "Ja-Ela Substation",
+          feeders: [
+            { id: "jaela_f1", name: "Ja-Ela", center: [7.0750, 79.8945] },
+            { id: "jaela_f2", name: "Ekala", center: [7.0890, 79.9120] },
+          ],
+        },
       ],
     },
     {
       id: "galle",
       name: "Galle",
-      center: [6.0535, 80.2170],
+      center: [6.0530, 80.2175],
       cscs: [
-        { id: "ambalangoda", name: "Ambalangoda", center: [6.2354, 80.0538], substationName: "Ambalangoda Substation", feeders: [{ id: "ambalangoda_f1", name: "Ambalangoda" }, { id: "ambalangoda_f2", name: "Balapitiya" }] },
-        { id: "hikkaduwa", name: "Hikkaduwa", center: [6.1395, 80.1006], substationName: "Hikkaduwa Substation", feeders: [{ id: "hikkaduwa_f1", name: "Hikkaduwa" }, { id: "hikkaduwa_f2", name: "Dodanduwa" }] },
-        { id: "galle_csc", name: "Galle", center: [6.0535, 80.2170], substationName: "Galle Substation", feeders: [{ id: "galle_f1", name: "Galle Fort" }, { id: "galle_f2", name: "Karapitiya" }] },
+        {
+          id: "ambalangoda",
+          name: "Ambalangoda",
+          center: [6.2360, 80.0540],
+          substationName: "Ambalangoda Substation",
+          feeders: [
+            { id: "ambalangoda_f1", name: "Ambalangoda", center: [6.2370, 80.0555] },
+            { id: "ambalangoda_f2", name: "Balapitiya", center: [6.2610, 80.0380] },
+          ],
+        },
+        {
+          id: "hikkaduwa",
+          name: "Hikkaduwa",
+          center: [6.1390, 80.1010],
+          substationName: "Hikkaduwa Substation",
+          feeders: [
+            { id: "hikkaduwa_f1", name: "Hikkaduwa", center: [6.1400, 80.1025] },
+            { id: "hikkaduwa_f2", name: "Dodanduwa", center: [6.1090, 80.1250] },
+          ],
+        },
+        {
+          id: "galle_csc",
+          name: "Galle",
+          center: [6.0545, 80.2185],
+          substationName: "Galle Substation",
+          feeders: [
+            { id: "galle_f1", name: "Galle Fort", center: [6.0310, 80.2170] },
+            { id: "galle_f2", name: "Karapitiya", center: [6.0640, 80.2260] },
+          ],
+        },
       ],
     },
   ],
@@ -138,12 +349,19 @@ const LECO_DATA: { branches: Branch[] } = {
 
 const DEFAULT_CENTER: [number, number] = [6.9271, 79.8612];
 
-// Deterministic small offset so each feeder sits at a distinct point near its CSC.
-function feederCenter(cscCenter: [number, number], feederId: string): [number, number] {
+// Returns the accurate geographic center for a feeder, or calculates a deterministic offset near its CSC.
+function feederCenter(cscOrCenter: Csc | [number, number], feederOrId: Feeder | string): [number, number] {
+  if (typeof feederOrId !== "string" && feederOrId.center) {
+    return feederOrId.center;
+  }
+
+  const cscCenter = Array.isArray(cscOrCenter) ? cscOrCenter : cscOrCenter.center;
+  const feederId = typeof feederOrId === "string" ? feederOrId : feederOrId.id;
+
   let h = 0;
   for (let i = 0; i < feederId.length; i++) h = (h * 31 + feederId.charCodeAt(i)) & 0xffff;
-  const dLat = (((h & 0xff) / 255) - 0.5) * 0.018;
-  const dLng = ((((h >> 8) & 0xff) / 255) - 0.5) * 0.018;
+  const dLat = (((h & 0xff) / 255) - 0.5) * 0.015;
+  const dLng = ((((h >> 8) & 0xff) / 255) - 0.5) * 0.015;
   return [cscCenter[0] + dLat, cscCenter[1] + dLng];
 }
 
@@ -176,7 +394,34 @@ function feederMetrics(feederId: string): { peak: number; energy: number; peakHo
   return { peak, energy, peakHour, solar };
 }
 
-/** One tile in the map summary strip: icon chip, label, and a big value. */
+/** Helper icon renderer for Advance Search results */
+function getNodeIcon(type: MapNodeDetails["type"]) {
+  switch (type) {
+    case "branch":
+      return <Building2 className="w-4 h-4 text-indigo-600" />;
+    case "csc":
+      return <Building className="w-4 h-4 text-cyan-600" />;
+    case "feeder":
+      return <Waypoints className="w-4 h-4 text-rose-500" />;
+    case "substation":
+      return <Cable className="w-4 h-4 text-red-500" />;
+    case "transformer":
+      return <Zap className="w-4 h-4 text-blue-500" />;
+    case "distributedSolar":
+    case "utilitySolar":
+      return <Sun className="w-4 h-4 text-amber-500" />;
+    case "evse":
+      return <BatteryCharging className="w-4 h-4 text-emerald-500" />;
+    case "distributedBattery":
+    case "utilityBattery":
+      return <Battery className="w-4 h-4 text-purple-500" />;
+    case "meterEndpoint":
+    default:
+      return <Grid className="w-4 h-4 text-slate-600" />;
+  }
+}
+
+/** Compact minimal tile in the map summary strip. */
 function StatTile({
   icon,
   tint,
@@ -193,20 +438,18 @@ function StatTile({
   valueClass?: string;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-border/60 bg-muted/30 p-3 min-w-0">
-      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md ${tint}`}>
+    <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-background/80 px-2.5 py-1 min-w-0 shadow-2xs transition-colors hover:bg-background">
+      <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${tint}`}>
         {icon}
       </span>
-      <div className="flex min-w-0 flex-col">
-        <span className="truncate text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          {label}
+      <div className="flex items-baseline gap-1 min-w-0">
+        <span className="truncate text-[11px] font-medium text-muted-foreground">
+          {label}:
         </span>
-        <span className="flex items-baseline gap-1">
-          <span className={`text-lg font-bold leading-tight tabular-nums ${valueClass ?? ""}`}>
-            {value}
-          </span>
-          {unit && <span className="text-xs font-medium text-muted-foreground">{unit}</span>}
+        <span className={`text-xs font-bold leading-tight tabular-nums shrink-0 ${valueClass ?? "text-foreground"}`}>
+          {value}
         </span>
+        {unit && <span className="text-[10px] font-medium text-muted-foreground shrink-0">{unit}</span>}
       </div>
     </div>
   );
@@ -229,25 +472,28 @@ interface LayerVisibility {
   transmission: boolean;
 }
 
-// Dynamically frame the map to the current scope: fit to all site centers when
-// several feeders are in view (e.g. all branches), otherwise center + zoom in.
+// Dynamically frame the map to the current scope or search focus.
 function MapView({
   sites,
   center,
   zoom,
+  searchFocus,
 }: {
   sites: Array<[number, number]>;
   center: [number, number];
   zoom: number;
+  searchFocus?: { center: [number, number]; zoom: number; id: string } | null;
 }) {
   const map = useMap();
   useEffect(() => {
-    if (sites.length > 1) {
+    if (searchFocus) {
+      map.flyTo(searchFocus.center, searchFocus.zoom, { animate: true, duration: 1.2 });
+    } else if (sites.length > 1) {
       map.fitBounds(L.latLngBounds(sites), { padding: [60, 60], animate: true });
     } else {
       map.setView(center, zoom, { animate: true });
     }
-  }, [sites, center, zoom, map]);
+  }, [sites, center, zoom, searchFocus, map]);
   return null;
 }
 
@@ -261,10 +507,284 @@ function ZoomWatcher({ onZoom }: { onZoom: (z: number) => void }) {
 }
 
 export function ForecastPlusMap() {
-  const [branch, setBranch] = useState("nugegoda");
-  const [csc, setCsc] = useState("maharagama");
+  const [branch, setBranch] = useState("moratuwa");
+  const [csc, setCsc] = useState("moratuwa_north");
   const [feeder, setFeeder] = useState("all");
   const [selectedNode, setSelectedNode] = useState<MapNodeDetails | null>(null);
+
+  // Advance Search States
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchCategory, setSearchCategory] = useState("all");
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchFocus, setSearchFocus] = useState<{ center: [number, number]; zoom: number; id: string } | null>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Computed index of ALL searchable nodes across the entire LECO grid network
+  const allMapNodes = useMemo<MapNodeDetails[]>(() => {
+    const nodes: MapNodeDetails[] = [];
+
+    LECO_DATA.branches.forEach(b => {
+      // Branch HQ
+      nodes.push({
+        id: `branch-${b.id}`,
+        name: `${b.name} Branch HQ`,
+        type: "branch",
+        typeName: "Branch HQ",
+        branchId: b.id,
+        branchName: `${b.name} Branch`,
+        center: b.center,
+        status: "Normal",
+      });
+
+      b.cscs.forEach(c => {
+        // CSC HQ
+        nodes.push({
+          id: `csc-${c.id}`,
+          name: `${c.name} CSC HQ`,
+          type: "csc",
+          typeName: "CSC HQ",
+          branchId: b.id,
+          branchName: `${b.name} Branch`,
+          cscId: c.id,
+          cscName: `${c.name} CSC`,
+          substationName: c.substationName,
+          center: c.center,
+          status: "Normal",
+        });
+
+        // Primary Substation
+        nodes.push({
+          id: `sub-${c.id}`,
+          name: c.substationName,
+          type: "substation",
+          typeName: "Primary Substation",
+          branchId: b.id,
+          branchName: `${b.name} Branch`,
+          cscId: c.id,
+          cscName: `${c.name} CSC`,
+          substationName: c.substationName,
+          center: c.center,
+          status: "Normal",
+        });
+
+        c.feeders.forEach(f => {
+          const fCenter = feederCenter(c, f);
+          // Feeder Line
+          nodes.push({
+            id: `feeder-${f.id}`,
+            name: `${f.name} Feeder`,
+            type: "feeder",
+            typeName: "11kV Feeder Line",
+            branchId: b.id,
+            branchName: `${b.name} Branch`,
+            cscId: c.id,
+            cscName: `${c.name} CSC`,
+            substationName: c.substationName,
+            feederId: f.id,
+            feederName: f.name,
+            center: fCenter,
+            status: "Normal",
+          });
+
+          // Distribution Transformers & DERs
+          const seedVal = hashStr(f.id);
+          const txCount = 5;
+          for (let i = 0; i < txCount; i++) {
+            const angle = (i / txCount) * Math.PI * 2 + (seedVal % 10) * 0.15;
+            const ring = 0.0026 + ((i + seedVal) % 3) * 0.0011;
+            const tPos: [number, number] = [
+              fCenter[0] + Math.sin(angle) * ring,
+              fCenter[1] + Math.cos(angle) * ring,
+            ];
+            const tId = `${f.id}-t${i + 1}`;
+            const tName = `${f.name} Tx ${String(i + 1).padStart(2, "0")}`;
+
+            nodes.push({
+              id: tId,
+              name: tName,
+              type: "transformer",
+              typeName: "Distribution Transformer 11kV/400V",
+              branchId: b.id,
+              branchName: `${b.name} Branch`,
+              cscId: c.id,
+              cscName: `${c.name} CSC`,
+              substationName: c.substationName,
+              feederId: f.id,
+              feederName: f.name,
+              transformerId: tId,
+              transformerName: tName,
+              center: tPos,
+              status: "Optimal",
+            });
+
+            if (i === 0) {
+              nodes.push({
+                id: `solar-${tId}`,
+                name: `${f.name} Rooftop Solar PV`,
+                type: "distributedSolar",
+                typeName: "Distributed Rooftop Solar PV",
+                branchId: b.id,
+                branchName: `${b.name} Branch`,
+                cscId: c.id,
+                cscName: `${c.name} CSC`,
+                substationName: c.substationName,
+                feederId: f.id,
+                feederName: f.name,
+                transformerId: tId,
+                transformerName: tName,
+                center: [tPos[0] + 0.0001, tPos[1] + 0.0001],
+                status: "Active",
+              });
+            } else if (i === 1) {
+              nodes.push({
+                id: `ev-${tId}`,
+                name: `${f.name} EV Charger EVSE`,
+                type: "evse",
+                typeName: "EV Fast Charger",
+                branchId: b.id,
+                branchName: `${b.name} Branch`,
+                cscId: c.id,
+                cscName: `${c.name} CSC`,
+                substationName: c.substationName,
+                feederId: f.id,
+                feederName: f.name,
+                transformerId: tId,
+                transformerName: tName,
+                center: [tPos[0] - 0.0001, tPos[1] + 0.0001],
+                status: "Active",
+              });
+            } else if (i === 2) {
+              nodes.push({
+                id: `bess-${tId}`,
+                name: `${f.name} Battery Storage BESS`,
+                type: "distributedBattery",
+                typeName: "Battery Energy Storage System",
+                branchId: b.id,
+                branchName: `${b.name} Branch`,
+                cscId: c.id,
+                cscName: `${c.name} CSC`,
+                substationName: c.substationName,
+                feederId: f.id,
+                feederName: f.name,
+                transformerId: tId,
+                transformerName: tName,
+                center: [tPos[0] + 0.0001, tPos[1] - 0.0001],
+                status: "Optimal",
+              });
+            } else {
+              nodes.push({
+                id: `meter-${tId}`,
+                name: `AMI Meter · A/C ${lecoAccountNumber(`meter-${tId}`)}`,
+                type: "meterEndpoint",
+                typeName: "Smart Meter Consumer",
+                branchId: b.id,
+                branchName: `${b.name} Branch`,
+                cscId: c.id,
+                cscName: `${c.name} CSC`,
+                substationName: c.substationName,
+                feederId: f.id,
+                feederName: f.name,
+                transformerId: tId,
+                transformerName: tName,
+                center: tPos,
+                status: "Normal",
+              });
+            }
+          }
+        });
+      });
+    });
+
+    return nodes;
+  }, []);
+
+  // Close search dropdown on click outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setIsSearchOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Hotkey listener for '/' key to focus search input
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (
+        e.key === "/" &&
+        document.activeElement !== searchInputRef.current &&
+        !(document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement)
+      ) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        setIsSearchOpen(true);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  const filteredSearchNodes = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase().trim();
+
+    return allMapNodes.filter(node => {
+      // Category filter match
+      if (searchCategory === "branch" && node.type !== "branch") return false;
+      if (searchCategory === "csc" && node.type !== "csc") return false;
+      if (searchCategory === "substation" && node.type !== "substation") return false;
+      if (searchCategory === "feeder" && node.type !== "feeder") return false;
+      if (searchCategory === "transformer" && node.type !== "transformer") return false;
+      if (searchCategory === "der" && !["distributedSolar", "utilitySolar", "evse", "distributedBattery", "utilityBattery"].includes(node.type)) return false;
+      if (searchCategory === "meterEndpoint" && node.type !== "meterEndpoint") return false;
+
+      // Text match across fields
+      const searchHaystack = [
+        node.name,
+        node.typeName,
+        node.id,
+        node.branchName,
+        node.cscName,
+        node.substationName,
+        node.feederName,
+        node.transformerName,
+      ].filter(Boolean).join(" ").toLowerCase();
+
+      return searchHaystack.includes(q);
+    });
+  }, [allMapNodes, searchQuery, searchCategory]);
+
+  const handleSelectSearchNode = (node: MapNodeDetails) => {
+    // Update filter dropdown hierarchy to match node if present
+    if (node.branchId) setBranch(node.branchId);
+    if (node.cscId) setCsc(node.cscId);
+    if (node.feederId) setFeeder(node.feederId);
+
+    // Set map focus coordinates
+    if (node.center) {
+      setSearchFocus({
+        center: node.center,
+        zoom: 16,
+        id: node.id,
+      });
+    }
+
+    // Trigger side panel
+    setSelectedNode(node);
+
+    // Close search dropdown
+    setIsSearchOpen(false);
+  };
+
+  const handleResetFilters = () => {
+    setBranch("all");
+    setCsc("all");
+    setFeeder("all");
+    setSearchFocus(null);
+  };
 
   const handleFilterToNode = (n: MapNodeDetails) => {
     if (n.branchId) {
@@ -294,6 +814,7 @@ export function ForecastPlusMap() {
     if (n.feederId) {
       setFeeder(n.feederId);
     }
+    setSearchFocus(null);
   };
 
   // Default view: core network layers only. Everything else is opt-in.
@@ -334,11 +855,13 @@ export function ForecastPlusMap() {
     setBranch(e.target.value);
     setCsc("all");
     setFeeder("all");
+    setSearchFocus(null);
   };
 
   const handleCscChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setCsc(e.target.value);
     setFeeder("all");
+    setSearchFocus(null);
   };
 
   const toggleLayer = (key: keyof LayerVisibility) => {
@@ -360,7 +883,7 @@ export function ForecastPlusMap() {
     if (!c) return b.center;
     const f = c.feeders.find(x => x.id === feeder);
     if (!f) return c.center;
-    return feederCenter(c.center, f.id);
+    return feederCenter(c, f);
   }, [branch, csc, feeder]);
 
   const mapZoom = useMemo(() => {
@@ -388,7 +911,7 @@ export function ForecastPlusMap() {
           csc: selectedCsc.name,
           substationName: selectedCsc.substationName,
           branchName: selectedBranch?.name,
-          center: feederCenter(selectedCsc.center, f.id),
+          center: feederCenter(selectedCsc, f),
         }))
       : [];
 
@@ -420,27 +943,19 @@ export function ForecastPlusMap() {
           substationName: c.substationName,
           cscName: c.name,
           branchName: b.name,
-          center: feederCenter(c.center, f.id),
+          center: feederCenter(c, f),
         }));
       });
     });
     return sites;
   }, [branch, csc, feeder]);
 
-  // Stable array of site centers for MapView. Derived from the memoized
-  // scopeSites so its identity only changes when the filter scope changes —
-  // NOT on every render (e.g. a zoom-triggered re-render), which would
-  // otherwise make MapView re-fit the bounds and fight the user's scroll-zoom.
+  // Stable array of site centers for MapView. Derived from the memoized scopeSites.
   const scopeCenters = useMemo(() => scopeSites.map(s => s.center), [scopeSites]);
 
-  // Level of detail scales inversely with how many feeders are on screen: fewer
-  // transformers per site and no meter endpoints at wide scopes so the map stays
-  // legible. Distribution lines are always road-routed (see the throttled fetch
-  // below) so they stay aligned to streets at every zoom level.
+  // Level of detail scales inversely with how many feeders are on screen.
   const detail = useMemo(() => {
     const n = scopeSites.length;
-    // Zoom drives how much detail to draw; the scope size caps it so a wide
-    // selection (e.g. all branches) can never explode into thousands of markers.
     const zoomTx = liveZoom >= 15 ? 8 : liveZoom >= 13 ? 5 : 3;
     const scopeTx = n <= 2 ? 8 : n <= 8 ? 5 : 3;
     return {
@@ -453,8 +968,6 @@ export function ForecastPlusMap() {
   const baseGrid = useMemo(() => {
     return scopeSites.map((s, si) => {
       const [cLat, cLng] = s.center;
-      // Distribution transformers arranged in a ring around the feeder
-      // substation, so the MV feeder lines fan out across the street network.
       const transformers: Array<{
         id: string;
         pos: [number, number];
@@ -485,15 +998,6 @@ export function ForecastPlusMap() {
 
   const [roadRoutes, setRoadRoutes] = useState<Record<string, Array<[number, number]>>>({});
 
-  // Fetch OSRM road paths so distribution lines follow the street network at
-  // every scope. A wide view (all branches) can need ~140 routes, so we run them
-  // through a small concurrency-limited queue rather than firing all at once,
-  // which would get rate-limited by the public OSRM server.
-  //
-  // Results are BATCHED into a single state update on a short interval instead
-  // of one setState per route. Otherwise ~140 sequential updates would each
-  // recompute `consumers`, rebuild the whole `markerLayers` tree, and re-
-  // reconcile hundreds of Leaflet layers -- the main source of map lag/stutter.
   useEffect(() => {
     let cancelled = false;
 
@@ -506,8 +1010,6 @@ export function ForecastPlusMap() {
     });
     if (jobs.length === 0) return;
 
-    // Accumulate completed routes here and flush them together, so the map
-    // re-renders a handful of times total rather than once per route.
     const pending: Record<string, Array<[number, number]>> = {};
     const flush = () => {
       const keys = Object.keys(pending);
@@ -551,7 +1053,6 @@ export function ForecastPlusMap() {
     Promise.all(
       Array.from({ length: Math.min(CONCURRENCY, jobs.length) }, () => runNext())
     ).then(() => {
-      // Final flush so the last partial batch lands even between ticks.
       if (!cancelled) flush();
     });
 
@@ -561,8 +1062,6 @@ export function ForecastPlusMap() {
     };
   }, [baseGrid]);
 
-  // Sample meter endpoints evenly along each transformer's actual road path so
-  // meters and their service drops hug the streets (matching the reference map).
   const consumers = useMemo(() => {
     const out: Array<{
       id: string;
@@ -587,7 +1086,6 @@ export function ForecastPlusMap() {
       const path = roadRoutes[routeKey(substation, t.pos)] || fallbackRoute(substation, t.pos);
       if (path.length < 2) return;
 
-      // Cumulative length so we can space meters evenly along the route.
       const cum: number[] = [0];
       for (let i = 1; i < path.length; i++) {
         const dLat = path[i][0] - path[i - 1][0];
@@ -607,7 +1105,6 @@ export function ForecastPlusMap() {
         const rLat = path[seg - 1][0] + (path[seg][0] - path[seg - 1][0]) * f;
         const rLng = path[seg - 1][1] + (path[seg][1] - path[seg - 1][1]) * f;
 
-        // Perpendicular offset to place the house off the road, alternating sides.
         const dLat = path[seg][0] - path[seg - 1][0];
         const dLng = path[seg][1] - path[seg - 1][1];
         const len = Math.hypot(dLat, dLng) || 1;
@@ -639,17 +1136,15 @@ export function ForecastPlusMap() {
     return out;
   }, [baseGrid, roadRoutes, seed, detail.showMeters]);
 
-  // Aggregate forecast stats rolled up over exactly the feeders in scope.
+  // Aggregate forecast stats rolled up over scope.
   const stats = useMemo(() => {
     const metrics = scopeSites.map(s => feederMetrics(s.feederId));
     const peak = metrics.reduce((s, m) => s + m.peak, 0);
     const energy = metrics.reduce((s, m) => s + m.energy, 0);
     const solar = metrics.reduce((s, m) => s + m.solar, 0);
-    // Time of system peak is driven by the largest feeder in scope.
     const peakHour = metrics.length
       ? metrics.reduce((a, b) => (b.peak > a.peak ? b : a)).peakHour
       : 18;
-    // Deterministic deviation vs. seasonal average for this scope (-4% .. +8%).
     const scopeKey = `${branch}|${csc}|${feeder}`;
     const vsAverage = ((hashStr(scopeKey) % 120) / 10) - 4;
     const fmtStat = (v: number) => {
@@ -671,7 +1166,6 @@ export function ForecastPlusMap() {
 
   const { peakVal, energyVal, solarVal, timeHour } = stats;
 
-  // Human-readable description of the active filter scope.
   const scopeLabel = useMemo(() => {
     const b = LECO_DATA.branches.find(x => x.id === branch);
     if (!b) return "All Branches";
@@ -682,7 +1176,6 @@ export function ForecastPlusMap() {
     return `${f.name} Feeder`;
   }, [branch, csc, feeder]);
 
-  // Grouped top-down: organization -> network (HV to LV) -> DER & storage -> protection.
   const legendGroups: Array<{
     title: string;
     items: Array<{ key: keyof LayerVisibility; label: string; icon: typeof Zap; color: string }>;
@@ -723,494 +1216,634 @@ export function ForecastPlusMap() {
     },
   ];
 
-  // The marker/line layers depend only on the filter scope, zoom-derived
-  // detail, and fetched routes -- never on `selectedNode`. Memoizing the
-  // element keeps its reference stable, so opening/closing the detail panel
-  // (a `selectedNode` change) makes React skip re-reconciling the hundreds of
-  // Leaflet layers instead of rebinding every marker's handlers.
   const markerLayers = useMemo(
     () => (
       <>
-            {/* LECO Org Hierarchy: Branch HQ */}
-            {layers.branchHq && orgMarkers.branchHqs.map(b => {
-              const nodeData: MapNodeDetails = {
-                id: b.id,
-                name: `${b.name} Branch HQ`,
-                type: "branch",
-                typeName: "Branch HQ",
-                branchId: b.id,
-                branchName: `${b.name} Branch`,
-                center: b.center,
-                status: "Normal"
-              };
-              return (
-                <Marker
-                  key={`branch-${b.id}`}
-                  position={b.center}
-                  icon={branchHqIcon}
-                  eventHandlers={{ click: () => setSelectedNode(nodeData) }}
+        {/* LECO Org Hierarchy: Branch HQ */}
+        {layers.branchHq && orgMarkers.branchHqs.map(b => {
+          const nodeData: MapNodeDetails = {
+            id: b.id,
+            name: `${b.name} Branch HQ`,
+            type: "branch",
+            typeName: "Branch HQ",
+            branchId: b.id,
+            branchName: `${b.name} Branch`,
+            center: b.center,
+            status: "Normal"
+          };
+          return (
+            <Marker
+              key={`branch-${b.id}`}
+              position={b.center}
+              icon={branchHqIcon}
+              eventHandlers={{ click: () => setSelectedNode(nodeData) }}
+            >
+              <Popup>
+                <div className="text-xs font-semibold">{b.name} Branch HQ</div>
+                <div className="text-[11px] text-muted-foreground mb-1.5">LECO Branch Office &middot; {b.cscs.length} CSCs</div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedNode(nodeData)}
+                  className="px-2 py-1 bg-primary text-primary-foreground text-[10px] font-semibold rounded shadow-xs hover:bg-primary/90 transition-colors w-full"
                 >
-                  <Popup>
-                    <div className="text-xs font-semibold">{b.name} Branch HQ</div>
-                    <div className="text-[11px] text-muted-foreground mb-1.5">LECO Branch Office &middot; {b.cscs.length} CSCs</div>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedNode(nodeData)}
-                      className="px-2 py-1 bg-primary text-primary-foreground text-[10px] font-semibold rounded shadow-xs hover:bg-primary/90 transition-colors w-full"
-                    >
-                      View Branch Forecast
-                    </button>
-                  </Popup>
-                </Marker>
-              );
-            })}
+                  View Branch Forecast
+                </button>
+              </Popup>
+            </Marker>
+          );
+        })}
 
-            {/* LECO Org Hierarchy: CSC HQ */}
-            {layers.cscHq && orgMarkers.cscHqs.map(c => {
-              const nodeData: MapNodeDetails = {
-                id: c.id,
-                name: `${c.name} CSC HQ`,
-                type: "csc",
-                typeName: "CSC HQ",
-                cscId: c.id,
-                cscName: `${c.name} CSC`,
-                substationName: c.substationName,
-                center: c.center,
-                status: "Normal"
-              };
-              return (
-                <Marker
-                  key={`csc-${c.id}`}
-                  position={c.center}
-                  icon={cscHqIcon}
-                  eventHandlers={{ click: () => setSelectedNode(nodeData) }}
+        {/* LECO Org Hierarchy: CSC HQ */}
+        {layers.cscHq && orgMarkers.cscHqs.map(c => {
+          const nodeData: MapNodeDetails = {
+            id: c.id,
+            name: `${c.name} CSC HQ`,
+            type: "csc",
+            typeName: "CSC HQ",
+            cscId: c.id,
+            cscName: `${c.name} CSC`,
+            substationName: c.substationName,
+            center: c.center,
+            status: "Normal"
+          };
+          return (
+            <Marker
+              key={`csc-${c.id}`}
+              position={c.center}
+              icon={cscHqIcon}
+              eventHandlers={{ click: () => setSelectedNode(nodeData) }}
+            >
+              <Popup>
+                <div className="text-xs font-semibold">{c.name} CSC HQ</div>
+                <div className="text-[11px] text-muted-foreground mb-1.5">Consumer Service Center &middot; {c.feeders.length} feeders</div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedNode(nodeData)}
+                  className="px-2 py-1 bg-primary text-primary-foreground text-[10px] font-semibold rounded shadow-xs hover:bg-primary/90 transition-colors w-full"
                 >
-                  <Popup>
-                    <div className="text-xs font-semibold">{c.name} CSC HQ</div>
-                    <div className="text-[11px] text-muted-foreground mb-1.5">Consumer Service Center &middot; {c.feeders.length} feeders</div>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedNode(nodeData)}
-                      className="px-2 py-1 bg-primary text-primary-foreground text-[10px] font-semibold rounded shadow-xs hover:bg-primary/90 transition-colors w-full"
-                    >
-                      View CSC Forecast
-                    </button>
-                  </Popup>
-                </Marker>
-              );
-            })}
+                  View CSC Forecast
+                </button>
+              </Popup>
+            </Marker>
+          );
+        })}
 
-            {/* LECO Org Hierarchy: Feeders */}
-            {layers.feeder && orgMarkers.feeders.map(f => {
-              const nodeData: MapNodeDetails = {
-                id: f.id,
-                name: `${f.name} Feeder`,
-                type: "feeder",
-                typeName: "Feeder Line",
-                branchName: f.branchName ? `${f.branchName} Branch` : undefined,
-                cscName: f.csc ? `${f.csc} CSC` : undefined,
-                substationName: f.substationName,
-                feederId: f.id,
-                feederName: f.name,
-                center: f.center,
-                status: "Normal"
-              };
-              return (
-                <Marker
-                  key={`feeder-${f.id}`}
-                  position={f.center}
-                  icon={feederIcon}
-                  eventHandlers={{ click: () => setSelectedNode(nodeData) }}
-                >
-                  <Popup>
-                    <div className="text-xs font-semibold">{f.name} Feeder</div>
-                    <div className="text-[11px] text-muted-foreground mb-1.5">{f.csc} CSC</div>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedNode(nodeData)}
-                      className="px-2 py-1 bg-primary text-primary-foreground text-[10px] font-semibold rounded shadow-xs hover:bg-primary/90 transition-colors w-full"
-                    >
-                      View Feeder Forecast
-                    </button>
-                  </Popup>
-                </Marker>
-              );
-            })}
+        {/* LECO Org Hierarchy: Feeders */}
+        {layers.feeder && orgMarkers.feeders.map(f => {
+          const nodeData: MapNodeDetails = {
+            id: f.id,
+            name: `${f.name} Feeder`,
+            type: "feeder",
+            typeName: "Feeder Line",
+            branchName: f.branchName ? `${f.branchName} Branch` : undefined,
+            cscName: f.csc ? `${f.csc} CSC` : undefined,
+            substationName: f.substationName,
+            feederId: f.id,
+            feederName: f.name,
+            center: f.center,
+            status: "Normal"
+          };
+          return (
+            <Marker
+              key={`feeder-${f.id}`}
+              position={f.center}
+              icon={feederIcon}
+              eventHandlers={{ click: () => setSelectedNode(nodeData) }}
+            >
+              <Popup>
+                <div className="flex flex-col gap-1 min-w-[210px] p-0.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-foreground">{f.name} Feeder</span>
+                    <Badge variant="outline" className="text-[9px] font-semibold py-0 px-1 text-rose-600 border-rose-200 bg-rose-50">11kV Feeder</Badge>
+                  </div>
+                  <div className="text-[11px] text-muted-foreground font-medium">
+                    {f.csc} CSC &middot; {f.substationName}
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-1.5 my-1.5 bg-muted/40 p-1.5 rounded-md border border-border/50 text-[10px]">
+                    <div>
+                      <span className="text-muted-foreground block">Firm Capacity:</span>
+                      <span className="font-semibold text-foreground">{(feederMetrics(f.id).peak * 1.8).toFixed(1)} MW</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground block">Forecast Peak:</span>
+                      <span className="font-semibold text-foreground">{feederMetrics(f.id).peak.toFixed(2)} MW</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground block">Peak Time:</span>
+                      <span className="font-semibold text-foreground">{feederMetrics(f.id).peakHour}:00 LKT</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground block">Rooftop Solar:</span>
+                      <span className="font-semibold text-amber-600">{feederMetrics(f.id).solar.toFixed(1)} MWh/d</span>
+                    </div>
+                  </div>
 
-            {/* Distribution Lines following OSM Road Network */}
-            {layers.distribution && baseGrid.flatMap(site =>
-              site.transformers.map(t => {
-                const key = routeKey(site.substation, t.pos);
-                const path = roadRoutes[key] || fallbackRoute(site.substation, t.pos);
-                return (
-                  <Polyline
-                    key={key}
-                    positions={path}
-                    pathOptions={{ color: '#0284c7', weight: 3.5, opacity: 0.9 }}
-                    eventHandlers={{
-                      click: () => setSelectedNode({
-                        id: `feeder-${site.feederId}`,
-                        name: `${site.feederName} Distribution Line`,
-                        type: "feeder",
-                        typeName: "11kV Distribution Line",
-                        branchName: site.branchName,
-                        cscName: site.cscName,
-                        substationName: site.substationName,
-                        feederName: site.feederName,
-                        status: "Normal"
-                      })
-                    }}
-                  />
-                );
-              })
-            )}
-
-            {/* Service Drop Lines */}
-            {layers.distribution && consumers.map(c => (
-              <Polyline
-                key={`drop-${c.id}`}
-                positions={[c.pos, c.roadPoint]}
-                pathOptions={{ color: '#38bdf8', weight: 1.5, opacity: 0.7, dashArray: '3 3' }}
-              />
-            ))}
-
-            {/* Substation Markers (one per feeder in scope) */}
-            {layers.substation && baseGrid.map(site => {
-              const nodeData: MapNodeDetails = {
-                id: `sub-${site.feederId}`,
-                name: site.substationName,
-                type: "substation",
-                typeName: "Primary Substation",
-                branchName: site.branchName,
-                cscName: site.cscName,
-                substationName: site.substationName,
-                feederName: site.feederName,
-                center: site.substation,
-                status: "Normal"
-              };
-              return (
-                <Marker
-                  key={`sub-${site.feederId}`}
-                  position={site.substation}
-                  icon={substationIcon}
-                  eventHandlers={{ click: () => setSelectedNode(nodeData) }}
-                >
-                  <Popup>
-                    <div className="text-xs font-semibold">{site.substationName}</div>
-                    <div className="text-[11px] text-muted-foreground">{site.cscName} CSC &middot; {site.branchName} Branch</div>
-                    <div className="text-[11px] text-muted-foreground font-mono mb-1.5">ID: SUB-{site.feederId.toUpperCase()}</div>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedNode(nodeData)}
-                      className="px-2 py-1 bg-primary text-primary-foreground text-[10px] font-semibold rounded shadow-xs hover:bg-primary/90 transition-colors w-full"
-                    >
-                      View Substation Forecast
-                    </button>
-                  </Popup>
-                </Marker>
-              );
-            })}
-
-            {/* Transformers */}
-            {layers.transformer && baseGrid.flatMap(site =>
-              site.transformers.map(t => {
-                const nodeData: MapNodeDetails = {
-                  id: t.id,
-                  name: t.name,
-                  type: "transformer",
-                  typeName: "Distribution Transformer",
-                  branchName: site.branchName,
-                  cscName: site.cscName,
-                  substationName: site.substationName,
-                  feederId: site.feederId,
-                  feederName: site.feederName,
-                  transformerId: t.id,
-                  transformerName: t.name,
-                  center: t.pos,
-                  status: "Optimal"
-                };
-                return (
-                  <Marker
-                    key={t.id}
-                    position={t.pos}
-                    icon={transformerIcon}
-                    eventHandlers={{ click: () => setSelectedNode(nodeData) }}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedNode(nodeData)}
+                    className="px-2.5 py-1.5 bg-primary text-primary-foreground text-[10px] font-semibold rounded-md shadow-xs hover:bg-primary/90 transition-colors w-full flex items-center justify-center gap-1"
                   >
-                    <Popup>
-                      <div className="text-xs font-semibold">{t.name}</div>
-                      <div className="text-[11px] text-muted-foreground mb-1.5">Distribution Transformer 11kV/400V</div>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedNode(nodeData)}
-                        className="px-2 py-1 bg-primary text-primary-foreground text-[10px] font-semibold rounded shadow-xs hover:bg-primary/90 transition-colors w-full"
-                      >
-                        View Transformer Forecast
-                      </button>
-                    </Popup>
-                  </Marker>
-                );
-              })
-            )}
+                    View Feeder Forecast & Analytics
+                  </button>
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
 
-            {/* Meter Endpoints & DERs */}
-            {consumers.map(c => {
-              const meterNode: MapNodeDetails = {
-                id: c.id,
-                name: `AMI Smart Meter (${c.id})`,
-                type: "meterEndpoint",
-                typeName: "Smart Meter Consumer",
-                branchName: c.branchName,
-                cscName: c.cscName,
-                substationName: c.substationName,
-                feederId: c.feederId,
-                feederName: c.feederName,
-                transformerId: c.transformerId,
-                transformerName: c.transformerName,
-                consumerId: c.id,
-                consumerName: `AMI Meter (${c.id})`,
-                center: c.pos,
-                status: "Normal"
-              };
-              const solarNode: MapNodeDetails = {
-                id: `pv-${c.id}`,
-                name: `Rooftop Solar PV (${c.id})`,
-                type: "distributedSolar",
-                typeName: "Distributed Solar PV",
-                branchName: c.branchName,
-                cscName: c.cscName,
-                substationName: c.substationName,
-                feederId: c.feederId,
-                feederName: c.feederName,
-                transformerId: c.transformerId,
-                transformerName: c.transformerName,
-                consumerId: c.id,
-                consumerName: `Consumer (${c.id})`,
-                center: c.pos,
-                status: "Active"
-              };
-              const evNode: MapNodeDetails = {
-                id: `ev-${c.id}`,
-                name: `EV Charger EVSE (${c.id})`,
-                type: "evse",
-                typeName: "EV Fast Charger",
-                branchName: c.branchName,
-                cscName: c.cscName,
-                substationName: c.substationName,
-                feederId: c.feederId,
-                feederName: c.feederName,
-                transformerId: c.transformerId,
-                transformerName: c.transformerName,
-                consumerId: c.id,
-                consumerName: `Consumer (${c.id})`,
-                center: c.pos,
-                status: "Active"
-              };
-              const batteryNode: MapNodeDetails = {
-                id: `bess-${c.id}`,
-                name: `Battery Storage BESS (${c.id})`,
-                type: "distributedBattery",
-                typeName: "Distributed Battery BESS",
-                branchName: c.branchName,
-                cscName: c.cscName,
-                substationName: c.substationName,
-                feederId: c.feederId,
-                feederName: c.feederName,
-                transformerId: c.transformerId,
-                transformerName: c.transformerName,
-                consumerId: c.id,
-                consumerName: `Consumer (${c.id})`,
-                center: c.pos,
-                status: "Optimal"
-              };
+        {/* Distribution Lines following OSM Road Network */}
+        {layers.distribution && baseGrid.flatMap(site =>
+          site.transformers.map(t => {
+            const key = routeKey(site.substation, t.pos);
+            const path = roadRoutes[key] || fallbackRoute(site.substation, t.pos);
+            return (
+              <Polyline
+                key={key}
+                positions={path}
+                pathOptions={{ color: '#0284c7', weight: 3.5, opacity: 0.9 }}
+                eventHandlers={{
+                  click: () => setSelectedNode({
+                    id: `feeder-${site.feederId}`,
+                    name: `${site.feederName} Distribution Line`,
+                    type: "feeder",
+                    typeName: "11kV Distribution Line",
+                    branchName: site.branchName,
+                    cscName: site.cscName,
+                    substationName: site.substationName,
+                    feederName: site.feederName,
+                    status: "Normal"
+                  })
+                }}
+              />
+            );
+          })
+        )}
 
-              return (
-                <React.Fragment key={c.id}>
-                  {layers.meterEndpoint && (
-                    <CircleMarker 
-                      center={c.pos} 
-                      radius={4.5} 
-                      pathOptions={{ color: '#ffffff', fillColor: '#0f172a', fillOpacity: 1, weight: 1.5 }}
-                      eventHandlers={{ click: () => setSelectedNode(meterNode) }}
+        {/* Service Drop Lines */}
+        {layers.distribution && consumers.map(c => (
+          <Polyline
+            key={`drop-${c.id}`}
+            positions={[c.pos, c.roadPoint]}
+            pathOptions={{ color: '#38bdf8', weight: 1.5, opacity: 0.7, dashArray: '3 3' }}
+          />
+        ))}
+
+        {/* Substation Markers (one per feeder in scope) */}
+        {layers.substation && baseGrid.map(site => {
+          const nodeData: MapNodeDetails = {
+            id: `sub-${site.feederId}`,
+            name: site.substationName,
+            type: "substation",
+            typeName: "Primary Substation",
+            branchName: site.branchName,
+            cscName: site.cscName,
+            substationName: site.substationName,
+            feederName: site.feederName,
+            center: site.substation,
+            status: "Normal"
+          };
+          return (
+            <Marker
+              key={`sub-${site.feederId}`}
+              position={site.substation}
+              icon={substationIcon}
+              eventHandlers={{ click: () => setSelectedNode(nodeData) }}
+            >
+              <Popup>
+                <div className="text-xs font-semibold">{site.substationName}</div>
+                <div className="text-[11px] text-muted-foreground">{site.cscName} CSC &middot; {site.branchName} Branch</div>
+                <div className="text-[11px] text-muted-foreground font-mono mb-1.5">ID: SUB-{site.feederId.toUpperCase()}</div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedNode(nodeData)}
+                  className="px-2 py-1 bg-primary text-primary-foreground text-[10px] font-semibold rounded shadow-xs hover:bg-primary/90 transition-colors w-full"
+                >
+                  View Substation Forecast
+                </button>
+              </Popup>
+            </Marker>
+          );
+        })}
+
+        {/* Transformers */}
+        {layers.transformer && baseGrid.flatMap(site =>
+          site.transformers.map(t => {
+            const nodeData: MapNodeDetails = {
+              id: t.id,
+              name: t.name,
+              type: "transformer",
+              typeName: "Distribution Transformer",
+              branchName: site.branchName,
+              cscName: site.cscName,
+              substationName: site.substationName,
+              feederId: site.feederId,
+              feederName: site.feederName,
+              transformerId: t.id,
+              transformerName: t.name,
+              center: t.pos,
+              status: "Optimal"
+            };
+            return (
+              <Marker
+                key={t.id}
+                position={t.pos}
+                icon={transformerIcon}
+                eventHandlers={{ click: () => setSelectedNode(nodeData) }}
+              >
+                <Popup>
+                  <div className="text-xs font-semibold">{t.name}</div>
+                  <div className="text-[11px] text-muted-foreground mb-1.5">Distribution Transformer 11kV/400V</div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedNode(nodeData)}
+                    className="px-2 py-1 bg-primary text-primary-foreground text-[10px] font-semibold rounded shadow-xs hover:bg-primary/90 transition-colors w-full"
+                  >
+                    View Transformer Forecast
+                  </button>
+                </Popup>
+              </Marker>
+            );
+          })
+        )}
+
+        {/* Meter Endpoints & DERs */}
+        {consumers.map(c => {
+          const acctNo = lecoAccountNumber(c.id);
+          const meterNode: MapNodeDetails = {
+            id: c.id,
+            name: `AMI Smart Meter · A/C ${acctNo}`,
+            type: "meterEndpoint",
+            typeName: "Smart Meter Consumer",
+            branchName: c.branchName,
+            cscName: c.cscName,
+            substationName: c.substationName,
+            feederId: c.feederId,
+            feederName: c.feederName,
+            transformerId: c.transformerId,
+            transformerName: c.transformerName,
+            consumerId: c.id,
+            consumerName: `AMI Meter · A/C ${acctNo}`,
+            center: c.pos,
+            status: "Normal"
+          };
+          const solarNode: MapNodeDetails = {
+            id: `pv-${c.id}`,
+            name: `Rooftop Solar PV (${c.id})`,
+            type: "distributedSolar",
+            typeName: "Distributed Solar PV",
+            branchName: c.branchName,
+            cscName: c.cscName,
+            substationName: c.substationName,
+            feederId: c.feederId,
+            feederName: c.feederName,
+            transformerId: c.transformerId,
+            transformerName: c.transformerName,
+            consumerId: c.id,
+            consumerName: `Consumer (${c.id})`,
+            center: c.pos,
+            status: "Active"
+          };
+          const evNode: MapNodeDetails = {
+            id: `ev-${c.id}`,
+            name: `EV Charger EVSE (${c.id})`,
+            type: "evse",
+            typeName: "EV Fast Charger",
+            branchName: c.branchName,
+            cscName: c.cscName,
+            substationName: c.substationName,
+            feederId: c.feederId,
+            feederName: c.feederName,
+            transformerId: c.transformerId,
+            transformerName: c.transformerName,
+            consumerId: c.id,
+            consumerName: `Consumer (${c.id})`,
+            center: c.pos,
+            status: "Active"
+          };
+          const batteryNode: MapNodeDetails = {
+            id: `bess-${c.id}`,
+            name: `Battery Storage BESS (${c.id})`,
+            type: "distributedBattery",
+            typeName: "Distributed Battery BESS",
+            branchName: c.branchName,
+            cscName: c.cscName,
+            substationName: c.substationName,
+            feederId: c.feederId,
+            feederName: c.feederName,
+            transformerId: c.transformerId,
+            transformerName: c.transformerName,
+            consumerId: c.id,
+            consumerName: `Consumer (${c.id})`,
+            center: c.pos,
+            status: "Optimal"
+          };
+
+          return (
+            <React.Fragment key={c.id}>
+              {layers.meterEndpoint && (
+                <CircleMarker 
+                  center={c.pos} 
+                  radius={4.5} 
+                  pathOptions={{ color: '#ffffff', fillColor: '#0f172a', fillOpacity: 1, weight: 1.5 }}
+                  eventHandlers={{ click: () => setSelectedNode(meterNode) }}
+                >
+                  <Popup>
+                    <div className="text-xs font-semibold">Meter Endpoint</div>
+                    <div className="text-[11px] text-muted-foreground mb-1.5">AMI Smart Meter &middot; <span className="font-mono">LECO A/C: {acctNo}</span></div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedNode(meterNode)}
+                      className="px-2 py-1 bg-primary text-primary-foreground text-[10px] font-semibold rounded shadow-xs hover:bg-primary/90 transition-colors w-full"
                     >
-                      <Popup>
-                        <div className="text-xs font-semibold">Meter Endpoint</div>
-                        <div className="text-[11px] text-muted-foreground mb-1.5">AMI Smart Meter &middot; <span className="font-mono">ID: {c.id}</span></div>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedNode(meterNode)}
-                          className="px-2 py-1 bg-primary text-primary-foreground text-[10px] font-semibold rounded shadow-xs hover:bg-primary/90 transition-colors w-full"
-                        >
-                          View Meter Forecast
-                        </button>
-                      </Popup>
-                    </CircleMarker>
-                  )}
+                      View Meter Forecast
+                    </button>
+                  </Popup>
+                </CircleMarker>
+              )}
 
-                  {/* Distributed Solar */}
-                  {layers.distributedSolar && c.der === "solar" && (
-                    <Marker
-                      position={[c.pos[0] + 0.00008, c.pos[1] + 0.00008]}
-                      icon={distributedSolarIcon}
-                      eventHandlers={{ click: () => setSelectedNode(solarNode) }}
+              {/* Distributed Solar */}
+              {layers.distributedSolar && c.der === "solar" && (
+                <Marker
+                  position={[c.pos[0] + 0.00008, c.pos[1] + 0.00008]}
+                  icon={distributedSolarIcon}
+                  eventHandlers={{ click: () => setSelectedNode(solarNode) }}
+                >
+                  <Popup>
+                    <div className="text-xs font-semibold">Distributed Solar</div>
+                    <div className="text-[11px] text-muted-foreground mb-1.5">Rooftop Solar PV System</div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedNode(solarNode)}
+                      className="px-2 py-1 bg-amber-600 text-white text-[10px] font-semibold rounded shadow-xs hover:bg-amber-700 transition-colors w-full"
                     >
-                      <Popup>
-                        <div className="text-xs font-semibold">Distributed Solar</div>
-                        <div className="text-[11px] text-muted-foreground mb-1.5">Rooftop Solar PV System</div>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedNode(solarNode)}
-                          className="px-2 py-1 bg-amber-600 text-white text-[10px] font-semibold rounded shadow-xs hover:bg-amber-700 transition-colors w-full"
-                        >
-                          View Solar Forecast
-                        </button>
-                      </Popup>
-                    </Marker>
-                  )}
+                      View Solar Forecast
+                    </button>
+                  </Popup>
+                </Marker>
+              )}
 
-                  {/* EVSE */}
-                  {layers.evse && c.der === "ev" && (
-                    <Marker
-                      position={[c.pos[0] + 0.00008, c.pos[1] + 0.00008]}
-                      icon={evseIcon}
-                      eventHandlers={{ click: () => setSelectedNode(evNode) }}
+              {/* EVSE */}
+              {layers.evse && c.der === "ev" && (
+                <Marker
+                  position={[c.pos[0] + 0.00008, c.pos[1] + 0.00008]}
+                  icon={evseIcon}
+                  eventHandlers={{ click: () => setSelectedNode(evNode) }}
+                >
+                  <Popup>
+                    <div className="text-xs font-semibold">EVSE Charging Station</div>
+                    <div className="text-[11px] text-muted-foreground mb-1.5">EV Supply Equipment</div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedNode(evNode)}
+                      className="px-2 py-1 bg-emerald-600 text-white text-[10px] font-semibold rounded shadow-xs hover:bg-emerald-700 transition-colors w-full"
                     >
-                      <Popup>
-                        <div className="text-xs font-semibold">EVSE Charging Station</div>
-                        <div className="text-[11px] text-muted-foreground mb-1.5">EV Supply Equipment</div>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedNode(evNode)}
-                          className="px-2 py-1 bg-emerald-600 text-white text-[10px] font-semibold rounded shadow-xs hover:bg-emerald-700 transition-colors w-full"
-                        >
-                          View EVSE Forecast
-                        </button>
-                      </Popup>
-                    </Marker>
-                  )}
+                      View EVSE Forecast
+                    </button>
+                  </Popup>
+                </Marker>
+              )}
 
-                  {/* Distributed Battery */}
-                  {layers.distributedBattery && c.der === "battery" && (
-                    <Marker
-                      position={[c.pos[0] + 0.00008, c.pos[1] + 0.00008]}
-                      icon={distributedBatteryIcon}
-                      eventHandlers={{ click: () => setSelectedNode(batteryNode) }}
+              {/* Distributed Battery */}
+              {layers.distributedBattery && c.der === "battery" && (
+                <Marker
+                  position={[c.pos[0] + 0.00008, c.pos[1] + 0.00008]}
+                  icon={distributedBatteryIcon}
+                  eventHandlers={{ click: () => setSelectedNode(batteryNode) }}
+                >
+                  <Popup>
+                    <div className="text-xs font-semibold">Distributed Battery Storage</div>
+                    <div className="text-[11px] text-muted-foreground mb-1.5">Battery Storage (BESS)</div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedNode(batteryNode)}
+                      className="px-2 py-1 bg-purple-600 text-white text-[10px] font-semibold rounded shadow-xs hover:bg-purple-700 transition-colors w-full"
                     >
-                      <Popup>
-                        <div className="text-xs font-semibold">Distributed Battery Storage</div>
-                        <div className="text-[11px] text-muted-foreground mb-1.5">Battery Storage (BESS)</div>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedNode(batteryNode)}
-                          className="px-2 py-1 bg-purple-600 text-white text-[10px] font-semibold rounded shadow-xs hover:bg-purple-700 transition-colors w-full"
-                        >
-                          View Battery Forecast
-                        </button>
-                      </Popup>
-                    </Marker>
-                  )}
-                </React.Fragment>
-              );
-            })}
-
+                      View Battery Forecast
+                    </button>
+                  </Popup>
+                </Marker>
+              )}
+            </React.Fragment>
+          );
+        })}
       </>
     ),
     [layers, orgMarkers, baseGrid, roadRoutes, consumers]
   );
 
   return (
-    <div className="flex flex-col w-full h-[calc(100vh-90px)] gap-4">
-      {/* Top Bar (Filters & Data Summary) */}
-      <div className="flex justify-between items-start gap-4 flex-wrap lg:flex-nowrap">
+    <div className="flex flex-col w-full h-[calc(100vh-80px)] gap-3">
+      
+      {/* Sleek Minimal Header: Advance Search, Scope Filters & Active Stats */}
+      <div className="bg-card/90 backdrop-blur-md p-3 rounded-xl border border-border/80 shadow-xs flex flex-col gap-2.5">
         
-        {/* Filters Panel */}
-        <div className="bg-card p-4 rounded-lg border border-border flex gap-4 items-end shadow-sm">
-          <div>
-            <label className="block text-xs text-muted-foreground mb-1 font-medium">Branch</label>
-            <select 
-              value={branch} 
-              onChange={handleBranchChange}
-              className="h-9 px-3 py-1 bg-background border border-border rounded-md text-sm min-w-[130px] focus:ring-1 focus:ring-primary"
-            >
-              <option value="all">All Branches</option>
-              {LECO_DATA.branches.map(b => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
+        {/* Controls Row: Advance Search & Scope Filters */}
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2.5">
+          
+          {/* Left: Advance Search Bar */}
+          <div className="relative flex-1 min-w-0" ref={searchContainerRef}>
+            <div className="flex items-center gap-2 bg-background border border-border/70 rounded-lg h-9 px-2.5 focus-within:ring-2 focus-within:ring-primary/30 focus-within:border-primary transition-all shadow-2xs">
+              <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+              
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setIsSearchOpen(true);
+                }}
+                onFocus={() => setIsSearchOpen(true)}
+                placeholder="Search any node, feeder, substation, DER..."
+                className="w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground/70 focus:outline-none min-w-[180px]"
+              />
+
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setIsSearchOpen(false);
+                  }}
+                  className="p-0.5 hover:bg-muted rounded-md text-muted-foreground transition-colors shrink-0"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+
+              <div className="h-3.5 w-[1px] bg-border shrink-0" />
+
+              {/* Category Filter Dropdown Pill */}
+              <select
+                value={searchCategory}
+                onChange={(e) => setSearchCategory(e.target.value)}
+                className="bg-muted/50 hover:bg-muted text-[11px] font-medium text-foreground px-2 py-0.5 rounded border border-border/40 focus:outline-none cursor-pointer shrink-0"
+              >
+                <option value="all">All Types</option>
+                <option value="branch">Branch HQs</option>
+                <option value="csc">CSC HQs</option>
+                <option value="substation">Substations</option>
+                <option value="feeder">Feeders</option>
+                <option value="transformer">Transformers</option>
+                <option value="der">Solar & DERs</option>
+                <option value="meterEndpoint">Smart Meters</option>
+              </select>
+
+              <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground bg-muted/60 rounded border border-border/60 shrink-0">
+                /
+              </kbd>
+            </div>
+
+            {/* Advance Search Dropdown Overlay */}
+            {isSearchOpen && filteredSearchNodes.length > 0 && (
+              <div className="absolute top-full left-0 right-0 mt-1 z-[500] bg-card border border-border shadow-lg rounded-lg max-h-[320px] overflow-y-auto divide-y divide-border/40 animate-in fade-in-50 slide-in-from-top-1 duration-150">
+                <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex justify-between items-center bg-muted/40">
+                  <span>Search Results ({filteredSearchNodes.length})</span>
+                  <span>Click to Focus Map</span>
+                </div>
+
+                {filteredSearchNodes.slice(0, 15).map((node) => (
+                  <button
+                    key={node.id}
+                    type="button"
+                    onClick={() => handleSelectSearchNode(node)}
+                    className="w-full flex items-center justify-between p-2 text-left hover:bg-accent/50 transition-colors group"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="p-1.5 rounded-md bg-muted/60 group-hover:bg-muted shrink-0 transition-colors">
+                        {getNodeIcon(node.type)}
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-xs font-semibold text-foreground truncate">
+                          {node.name}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground truncate">
+                          {[node.substationName, node.cscName, node.branchName].filter(Boolean).join(" · ")}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0 ml-2">
+                      <Badge variant="outline" className="text-[9px] font-medium uppercase tracking-wider py-0 px-1.5">
+                        {node.typeName}
+                      </Badge>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-          <div>
-            <label className="block text-xs text-muted-foreground mb-1 font-medium">CSC</label>
-            <select 
-              value={csc} 
-              onChange={handleCscChange}
-              disabled={branch === "all"}
-              className="h-9 px-3 py-1 bg-background border border-border rounded-md text-sm min-w-[130px] focus:ring-1 focus:ring-primary disabled:opacity-50"
-            >
-              <option value="all">All CSCs</option>
-              {availableCscs.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-muted-foreground mb-1 font-medium">Feeder</label>
-            <select 
-              value={feeder} 
-              onChange={(e) => setFeeder(e.target.value)}
-              disabled={csc === "all"}
-              className="h-9 px-3 py-1 bg-background border border-border rounded-md text-sm min-w-[130px] focus:ring-1 focus:ring-primary disabled:opacity-50"
-            >
-              <option value="all">All Feeders</option>
-              {availableFeeders.map(f => (
-                <option key={f.id} value={f.id}>{f.name}</option>
-              ))}
-            </select>
+
+          {/* Right: Scope Filters Dropdown Pill */}
+          <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap shrink-0">
+            <div className="flex items-center gap-1 bg-background border border-border/70 rounded-lg h-9 px-2 shadow-2xs text-xs">
+              <Filter className="w-3.5 h-3.5 text-primary shrink-0 ml-0.5" />
+              <span className="font-semibold text-muted-foreground text-[11px] shrink-0">Scope:</span>
+              
+              <select
+                value={branch}
+                onChange={handleBranchChange}
+                className="h-7 px-1 bg-transparent text-xs font-medium focus:outline-none cursor-pointer text-foreground"
+              >
+                <option value="all">All Branches</option>
+                {LECO_DATA.branches.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+
+              <span className="text-muted-foreground/40 text-[10px]">/</span>
+
+              <select
+                value={csc}
+                onChange={handleCscChange}
+                disabled={branch === "all"}
+                className="h-7 px-1 bg-transparent text-xs font-medium focus:outline-none cursor-pointer text-foreground disabled:opacity-40"
+              >
+                <option value="all">All CSCs</option>
+                {availableCscs.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+
+              <span className="text-muted-foreground/40 text-[10px]">/</span>
+
+              <select
+                value={feeder}
+                onChange={(e) => {
+                  setFeeder(e.target.value);
+                  setSearchFocus(null);
+                }}
+                disabled={csc === "all"}
+                className="h-7 px-1 bg-transparent text-xs font-medium focus:outline-none cursor-pointer text-foreground disabled:opacity-40"
+              >
+                <option value="all">All Feeders</option>
+                {availableFeeders.map(f => (
+                  <option key={f.id} value={f.id}>{f.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {(branch !== "all" || csc !== "all" || feeder !== "all" || searchFocus !== null) && (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="flex items-center gap-1 h-9 px-2 bg-muted/60 hover:bg-muted text-xs font-medium text-muted-foreground hover:text-foreground rounded-lg transition-colors border border-border/50"
+                title="Reset filters"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span className="hidden sm:inline">Reset</span>
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Summary Panel */}
-        <div className="bg-card p-4 rounded-lg border border-border flex-1 min-w-0 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              {scopeLabel}
-            </span>
-            <span className="text-[11px] text-muted-foreground">
-              {stats.feederCount} feeder{stats.feederCount === 1 ? "" : "s"} in scope
-            </span>
+        {/* Minimal Streamlined Active Scope Stats Strip */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/40 pt-2">
+          
+          {/* Active Scope Label */}
+          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground shrink-0">
+            <Sparkles className="w-3.5 h-3.5 text-primary" />
+            <span className="font-semibold text-foreground">{scopeLabel}</span>
+            <span className="text-muted-foreground/60">&middot;</span>
+            <span>{stats.feederCount} feeder{stats.feederCount === 1 ? "" : "s"}</span>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+
+          {/* Minimal Inline Stats Pills */}
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
             <StatTile
-              icon={<Zap className="w-4 h-4 text-primary" />}
+              icon={<Zap className="w-3.5 h-3.5 text-primary" />}
               tint="bg-primary/10"
-              label="Forecast Peak"
+              label="Peak"
               value={peakVal}
               unit="MW"
             />
             <StatTile
-              icon={<EnergyIcon className="w-4 h-4 text-amber-500" />}
+              icon={<EnergyIcon className="w-3.5 h-3.5 text-amber-500" />}
               tint="bg-amber-500/10"
-              label="Forecast Energy"
+              label="Energy"
               value={energyVal}
               unit="MWh"
             />
             <StatTile
-              icon={<Sun className="w-4 h-4 text-amber-500" />}
+              icon={<Sun className="w-3.5 h-3.5 text-amber-500" />}
               tint="bg-amber-500/10"
-              label="Solar Generation"
+              label="Solar"
               value={solarVal}
               unit="MWh"
             />
             <StatTile
-              icon={<Clock className="w-4 h-4 text-blue-500" />}
+              icon={<Clock className="w-3.5 h-3.5 text-blue-500" />}
               tint="bg-blue-500/10"
-              label="Time of Peak"
+              label="Peak Time"
               value={`${timeHour}:00`}
             />
             <StatTile
-              icon={<Percent className="w-4 h-4 text-emerald-500" />}
+              icon={<Percent className="w-3.5 h-3.5 text-emerald-500" />}
               tint="bg-emerald-500/10"
-              label="vs. Average"
+              label="vs Avg"
               value={`${stats.vsAverage >= 0 ? "+" : ""}${stats.vsAverage.toFixed(1)}%`}
-              valueClass={stats.vsAverage >= 0 ? "text-emerald-600" : "text-rose-600"}
+              valueClass={stats.vsAverage >= 0 ? "text-emerald-600 font-bold" : "text-rose-600 font-bold"}
             />
           </div>
         </div>
@@ -1222,10 +1855,10 @@ export function ForecastPlusMap() {
         {/* Full Width Map View */}
         <div className="w-full h-full">
           <MapContainer center={mapCenter} zoom={mapZoom} style={{ height: "100%", width: "100%", zIndex: 0 }}>
-            <MapView sites={scopeCenters} center={mapCenter} zoom={mapZoom} />
+            <MapView sites={scopeCenters} center={mapCenter} zoom={mapZoom} searchFocus={searchFocus} />
             <ZoomWatcher onZoom={setLiveZoom} />
 
-            {/* Carto Positron Crisp Light Tile Layer (100% Free & Reliable) */}
+            {/* Carto Positron Crisp Light Tile Layer */}
             <TileLayer
               attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
               url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
@@ -1235,8 +1868,8 @@ export function ForecastPlusMap() {
             {markerLayers}
           </MapContainer>
 
-          {/* Floating Right-Side Layer Legend Box (collapsible) */}
-          <div className="absolute top-4 right-4 z-[400] bg-background/95 backdrop-blur-md rounded-lg border border-border shadow-xl w-60 text-xs overflow-hidden">
+          {/* Floating Right-Side Layer Legend Box */}
+          <div className="absolute top-4 right-4 z-[400] bg-card rounded-lg border border-border shadow-md w-60 text-xs overflow-hidden">
             <button
               type="button"
               onClick={() => setLegendOpen(o => !o)}
@@ -1289,7 +1922,7 @@ export function ForecastPlusMap() {
           <>
             {/* Full Viewport Backdrop */}
             <div
-              className="fixed inset-0 z-[9998] bg-black/40 dark:bg-black/60 backdrop-blur-xs animate-in fade-in duration-200 cursor-pointer"
+              className="fixed inset-0 z-[9998] bg-black/50 animate-in fade-in duration-150 cursor-pointer"
               onClick={() => setSelectedNode(null)}
               aria-label="Click away to close node panel"
             />
