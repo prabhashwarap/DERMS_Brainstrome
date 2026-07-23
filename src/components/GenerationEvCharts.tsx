@@ -124,6 +124,7 @@ function deriveBundle(
       baseline: Math.max(0, v * 0.93 + opts.firmMW * 0.01),
       tempC: f.tempC,
       cloud: f.cloud,
+      solarMW: v,
     };
   });
 

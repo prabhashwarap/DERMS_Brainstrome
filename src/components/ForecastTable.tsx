@@ -28,6 +28,7 @@ export const ForecastTable = memo(function ForecastTable({ bundle }: { bundle: B
     expected: number;
     lower: number;
     upper: number;
+    generation: number;
     tempC: number;
     energy: number;
   }> = [];
@@ -39,6 +40,7 @@ export const ForecastTable = memo(function ForecastTable({ bundle }: { bundle: B
       expected: slice.reduce((a, b) => a + b.expected, 0) / 4,
       lower: Math.min(...slice.map((s) => s.lower)),
       upper: Math.max(...slice.map((s) => s.upper)),
+      generation: slice.reduce((a, b) => a + (b.solarMW ?? 0), 0) / 4,
       tempC: slice.reduce((a, b) => a + b.tempC, 0) / 4,
       energy: slice.reduce((a, b) => a + b.expected * 0.25, 0),
     });
@@ -61,7 +63,7 @@ export const ForecastTable = memo(function ForecastTable({ bundle }: { bundle: B
             Hourly forecast table · {formatLKT(bundle.horizonStart, { date: true, time: false })}
           </span>
           <span className="block text-xs text-muted-foreground">
-            Hourly load mean, P95 bounds, and energy totals.
+            Hourly load mean, generation forecast, P95 bounds, and energy totals.
           </span>
         </span>
         <ChevronDown
@@ -72,9 +74,9 @@ export const ForecastTable = memo(function ForecastTable({ bundle }: { bundle: B
       </button>
       <CardContent hidden={!open}>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[520px] text-xs">
+          <table className="w-full min-w-[600px] text-xs">
             <caption className="sr-only">
-              Hourly day-ahead load forecast for {bundle.feeder.name} with confidence bounds and
+              Hourly day-ahead load forecast for {bundle.feeder.name} with generation, confidence bounds, and
               forecast temperature.
             </caption>
             <thead>
@@ -83,6 +85,7 @@ export const ForecastTable = memo(function ForecastTable({ bundle }: { bundle: B
                 <th scope="col" className="py-2 pr-3 text-right font-medium">Expected MW</th>
                 <th scope="col" className="py-2 pr-3 text-right font-medium">Lower MW</th>
                 <th scope="col" className="py-2 pr-3 text-right font-medium">Upper MW</th>
+                <th scope="col" className="py-2 pr-3 text-right font-medium">Generation MW</th>
                 <th scope="col" className="py-2 pr-3 text-right font-medium">Energy MWh</th>
                 <th scope="col" className="py-2 text-right font-medium">Temp °C</th>
               </tr>
@@ -112,6 +115,9 @@ export const ForecastTable = memo(function ForecastTable({ bundle }: { bundle: B
                     <td className="py-1.5 pr-3 text-right text-muted-foreground">
                       {fmtNum(h.upper)}
                     </td>
+                    <td className="py-1.5 pr-3 text-right text-amber-600/90 dark:text-amber-400/90 font-medium">
+                      {fmtNum(h.generation)}
+                    </td>
                     <td className="py-1.5 pr-3 text-right">{fmtNum(h.energy)}</td>
                     <td className="py-1.5 text-right text-muted-foreground">
                       {h.tempC.toFixed(1)}
@@ -126,6 +132,9 @@ export const ForecastTable = memo(function ForecastTable({ bundle }: { bundle: B
                 <td className="py-2 pr-3 text-right">{fmtNum(bundle.kpis.peakMW)} peak</td>
                 <td className="py-2 pr-3" />
                 <td className="py-2 pr-3" />
+                <td className="tnum py-2 pr-3 text-right text-amber-600/90 dark:text-amber-400/90">
+                  {fmtNum(bundle.kpis.solarEnergyMWh)} MWh
+                </td>
                 <td className="tnum py-2 pr-3 text-right">{fmtNum(bundle.kpis.energyMWh)}</td>
                 <td className="py-2" />
               </tr>

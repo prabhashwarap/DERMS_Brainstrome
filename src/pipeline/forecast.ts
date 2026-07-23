@@ -28,6 +28,7 @@ export interface ForecastPoint {
   baseline: number;
   tempC: number;
   cloud: number;
+  solarMW?: number;
 }
 
 export interface HistoryPoint {
@@ -226,6 +227,7 @@ function predictHorizon(
       baseline: baselineProfile[s],
       tempC,
       cloud,
+      solarMW: r.solarMW,
     });
   }
   return smoothBounds(out);
