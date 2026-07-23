@@ -526,7 +526,7 @@ function ZoomWatcher({ onZoom }: { onZoom: (z: number) => void }) {
 export function ForecastPlusMap() {
   const [branch, setBranch] = useState("moratuwa");
   const [csc, setCsc] = useState("moratuwa_north");
-  const [feeder, setFeeder] = useState("all");
+  const [feeder, setFeeder] = useState("angulana");
   const [selectedNode, setSelectedNode] = useState<MapNodeDetails | null>(null);
 
   // Advance Search States
@@ -797,9 +797,9 @@ export function ForecastPlusMap() {
   };
 
   const handleResetFilters = () => {
-    setBranch("all");
-    setCsc("all");
-    setFeeder("all");
+    setBranch("moratuwa");
+    setCsc("moratuwa_north");
+    setFeeder("angulana");
     setSearchFocus(null);
   };
 
@@ -1802,7 +1802,7 @@ export function ForecastPlusMap() {
               </select>
             </div>
 
-            {(branch !== "all" || csc !== "all" || feeder !== "all" || searchFocus !== null) && (
+            {(branch !== "moratuwa" || csc !== "moratuwa_north" || feeder !== "angulana" || searchFocus !== null) && (
               <button
                 type="button"
                 onClick={handleResetFilters}
