@@ -1654,7 +1654,7 @@ export function ForecastPlusMap() {
     <div className="flex flex-col w-full h-[calc(100vh-80px)] gap-3">
       
       {/* Sleek Minimal Header: Advance Search, Scope Filters & Active Stats */}
-      <div className="bg-card/90 backdrop-blur-md p-3 rounded-xl border border-border/80 shadow-xs flex flex-col gap-2.5">
+      <div className="relative z-50 bg-card/90 backdrop-blur-md p-3 rounded-xl border border-border/80 shadow-xs flex flex-col gap-2.5">
         
         {/* Controls Row: Advance Search & Scope Filters */}
         <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2.5">
@@ -1715,7 +1715,7 @@ export function ForecastPlusMap() {
 
             {/* Advance Search Dropdown Overlay */}
             {isSearchOpen && filteredSearchNodes.length > 0 && (
-              <div className="absolute top-full left-0 right-0 mt-1 z-[500] bg-card border border-border shadow-lg rounded-lg max-h-[320px] overflow-y-auto divide-y divide-border/40 animate-in fade-in-50 slide-in-from-top-1 duration-150">
+              <div className="absolute top-full left-0 right-0 mt-1 z-[9999] bg-card border border-border shadow-xl rounded-lg max-h-[320px] overflow-y-auto divide-y divide-border/40 animate-in fade-in-50 slide-in-from-top-1 duration-150">
                 <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex justify-between items-center bg-muted/40">
                   <span>Search Results ({filteredSearchNodes.length})</span>
                   <span>Click to Focus Map</span>
