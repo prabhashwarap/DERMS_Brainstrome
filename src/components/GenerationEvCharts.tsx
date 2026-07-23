@@ -155,6 +155,8 @@ function deriveBundle(
       capacityUtilisation: (100 * peak.upper) / opts.firmMW,
       minMW: trough.expected,
       minAt: trough.ts,
+      solarEnergyMWh: 0,
+      solarPeakMW: 0,
     },
   };
 }

@@ -72,6 +72,10 @@ export interface Bundle {
     capacityUtilisation: number;
     minMW: number;
     minAt: number;
+    /** Rooftop PV energy generated over the horizon, MWh. */
+    solarEnergyMWh: number;
+    /** Peak instantaneous rooftop PV output over the horizon, MW. */
+    solarPeakMW: number;
   };
 }
 
@@ -316,6 +320,8 @@ function buildKpis(
 
   const day = SLOTS_PER_DAY;
   const yesterday = readings.slice(originIndex - day, originIndex);
+  // Behind-the-meter rooftop PV over the same 24h horizon as the load forecast.
+  const horizon = readings.slice(originIndex, originIndex + day);
 
   return {
     peakMW: peak.expected,
@@ -330,6 +336,8 @@ function buildKpis(
     capacityUtilisation: (100 * peak.upper) / capacityMW(feeder),
     minMW: trough.expected,
     minAt: trough.ts,
+    solarEnergyMWh: horizon.reduce((a, r) => a + r.solarMW * hours, 0),
+    solarPeakMW: horizon.length ? Math.max(...horizon.map((r) => r.solarMW)) : 0,
   };
 }
 

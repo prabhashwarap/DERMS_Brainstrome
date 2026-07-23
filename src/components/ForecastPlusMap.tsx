@@ -162,13 +162,16 @@ const fallbackRoute = (sub: [number, number], t: [number, number]): Array<[numbe
 
 // Deterministic per-feeder forecast so aggregate stats are a real roll-up of
 // whatever is in scope (a single feeder, a CSC's feeders, a branch, or all).
-function feederMetrics(feederId: string): { peak: number; energy: number; peakHour: number } {
+function feederMetrics(feederId: string): { peak: number; energy: number; peakHour: number; solar: number } {
   const h = hashStr(feederId);
   const peak = 3.2 + (h % 40) / 10; // ~3.2-7.1 MW per feeder
   const loadFactor = 0.55 + ((h >> 3) % 26) / 100; // 0.55-0.80
   const energy = peak * 24 * loadFactor;
   const peakHour = 17 + ((h >> 5) % 4); // 17:00-20:00
-  return { peak, energy, peakHour };
+  // Behind-the-meter rooftop PV: penetration 5-35% of peak, ~5.5 solar-hours/day.
+  const solarPen = 0.05 + ((h >> 7) % 31) / 100;
+  const solar = peak * solarPen * 5.5;
+  return { peak, energy, peakHour, solar };
 }
 
 interface LayerVisibility {
@@ -566,6 +569,7 @@ export function ForecastPlusMap() {
     const metrics = scopeSites.map(s => feederMetrics(s.feederId));
     const peak = metrics.reduce((s, m) => s + m.peak, 0);
     const energy = metrics.reduce((s, m) => s + m.energy, 0);
+    const solar = metrics.reduce((s, m) => s + m.solar, 0);
     // Time of system peak is driven by the largest feeder in scope.
     const peakHour = metrics.length
       ? metrics.reduce((a, b) => (b.peak > a.peak ? b : a)).peakHour
@@ -583,13 +587,14 @@ export function ForecastPlusMap() {
     return {
       peakVal: fmtStat(peak),
       energyVal: fmtStat(energy),
+      solarVal: fmtStat(solar),
       timeHour: peakHour,
       vsAverage,
       feederCount: scopeSites.length,
     };
   }, [scopeSites, branch, csc, feeder]);
 
-  const { peakVal, energyVal, timeHour } = stats;
+  const { peakVal, energyVal, solarVal, timeHour } = stats;
 
   // Human-readable description of the active filter scope.
   const scopeLabel = useMemo(() => {
@@ -1043,7 +1048,7 @@ export function ForecastPlusMap() {
         </div>
 
         {/* Summary Panel */}
-        <div className="bg-card p-4 rounded-lg border border-border flex-1 lg:max-w-xl shadow-sm">
+        <div className="bg-card p-4 rounded-lg border border-border flex-1 lg:max-w-2xl shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               {scopeLabel}
@@ -1052,7 +1057,7 @@ export function ForecastPlusMap() {
               {stats.feederCount} feeder{stats.feederCount === 1 ? "" : "s"} in scope
             </span>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 items-center">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 items-center">
             <div className="flex flex-col border-r border-border/50 pr-4">
               <span className="text-xs text-muted-foreground flex items-center gap-1 mb-1 whitespace-nowrap">
                 <Zap className="w-3 h-3 text-primary" /> Forecast Peak
@@ -1064,6 +1069,12 @@ export function ForecastPlusMap() {
                 <EnergyIcon className="w-3 h-3 text-amber-500" /> Forecast Energy
               </span>
               <span className="font-bold text-lg">{energyVal} MWh</span>
+            </div>
+            <div className="flex flex-col border-r border-border/50 pr-4">
+              <span className="text-xs text-muted-foreground flex items-center gap-1 mb-1 whitespace-nowrap">
+                <Sun className="w-3 h-3 text-amber-500" /> Solar Generation
+              </span>
+              <span className="font-bold text-lg">{solarVal} MWh</span>
             </div>
             <div className="flex flex-col border-r border-border/50 pr-4">
               <span className="text-xs text-muted-foreground flex items-center gap-1 mb-1 whitespace-nowrap">

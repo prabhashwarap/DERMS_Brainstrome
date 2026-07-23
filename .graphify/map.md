@@ -40,7 +40,7 @@ Read this map to locate code, then open only the file(s) you need. Signatures ar
 - GenerationEvCharts({ bundle }: Props)
 
 ## src/components/KpiRow.tsx
-- KpiRow({ bundle }: { bundle: Bundle })  [memo]
+- KpiRow({ bundle, solar = false, }: { bundle: Bundle; /** Show the rooftop-PV generation tile (Forecast+ node panels only). */ solar?: boolean; })  [memo]
 
 ## src/components/Logo.tsx
 - Logo({ className }: { className?: string })

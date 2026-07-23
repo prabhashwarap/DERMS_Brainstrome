@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { ArrowDownRight, ArrowUpRight, Clock, Gauge, Minus, Zap } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Clock, Gauge, Minus, Sun, Zap } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatLKT } from "@/pipeline/calendar";
@@ -66,14 +66,26 @@ function Tile({ label, value, unit, icon, footnote, help }: TileProps) {
  */
 // Depends only on `bundle`; memo keeps chart-hover re-renders of App from
 // cascading into the KPI tiles.
-export const KpiRow = memo(function KpiRow({ bundle }: { bundle: Bundle }) {
+export const KpiRow = memo(function KpiRow({
+  bundle,
+  solar = false,
+}: {
+  bundle: Bundle;
+  /** Show the rooftop-PV generation tile (Forecast+ node panels only). */
+  solar?: boolean;
+}) {
   const k = bundle.kpis;
   const peakDelta = k.prevPeakMW > 0 ? ((k.peakMW - k.prevPeakMW) / k.prevPeakMW) * 100 : 0;
   const energyDelta = k.prevEnergyMWh > 0 ? ((k.energyMWh - k.prevEnergyMWh) / k.prevEnergyMWh) * 100 : 0;
   const DeltaIcon = peakDelta > 0.5 ? ArrowUpRight : peakDelta < -0.5 ? ArrowDownRight : Minus;
+  const showSolar = solar && k.solarEnergyMWh > 0.005;
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div
+      className={`grid grid-cols-1 gap-3 sm:grid-cols-2 ${
+        showSolar ? "xl:grid-cols-5" : "xl:grid-cols-4"
+      }`}
+    >
       <Tile
         label="Peak Load"
         value={mw(k.peakMW)}
@@ -110,6 +122,20 @@ export const KpiRow = memo(function KpiRow({ bundle }: { bundle: Bundle }) {
           </span>
         }
       />
+      {showSolar && (
+        <Tile
+          label="Solar Generation"
+          value={mwh(k.solarEnergyMWh)}
+          unit="MWh"
+          icon={<Sun className="h-4 w-4" />}
+          help="Rooftop PV energy generated behind the meter over the 24h horizon."
+          footnote={
+            <span className="tnum">
+              Peak {mw(k.solarPeakMW)} MW
+            </span>
+          }
+        />
+      )}
       <Tile
         label="vs. Yesterday"
         value={pct(peakDelta)}

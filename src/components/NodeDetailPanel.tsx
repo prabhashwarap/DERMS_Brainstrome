@@ -261,7 +261,7 @@ export function NodeDetailPanel({ node, onClose, onFilterToNode }: NodeDetailPan
         ) : (
           <>
             {/* KPI Executive Summary Row */}
-            <KpiRow bundle={bundle} />
+            <KpiRow bundle={bundle} solar />
 
             {/* Two-Column Grid Layout matching Forecasting Tab */}
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
