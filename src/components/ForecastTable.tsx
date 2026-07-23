@@ -56,11 +56,10 @@ export function ForecastTable({ bundle }: { bundle: Bundle }) {
         <Table2 className="h-4 w-4 shrink-0 text-muted-foreground" />
         <span className="min-w-0">
           <span className="block text-sm font-semibold tracking-tight">
-            Hourly forecast table - {formatLKT(bundle.horizonStart, { date: true, time: false })}
+            Hourly forecast table · {formatLKT(bundle.horizonStart, { date: true, time: false })}
           </span>
           <span className="block text-xs text-muted-foreground">
-            Mean load per hour with the 95% interval. The numbers behind the chart, for anyone who
-            needs to read or copy them.
+            Hourly load mean, P95 bounds, and energy totals.
           </span>
         </span>
         <ChevronDown

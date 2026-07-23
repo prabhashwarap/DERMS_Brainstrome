@@ -86,10 +86,8 @@ export default function App() {
             <ContextPanel bundle={bundle} hoverTs={hoverTs} />
           </div>
 
-          <footer className="pb-2 text-[11px] leading-relaxed text-muted-foreground">
-            LECO day-ahead load forecasting · v1 pilot · Oversight. All load, weather and accuracy
-            figures on this screen are generated from a synthetic model of the feeder and must not
-            be used for dispatch or procurement.
+          <footer className="pb-2 text-[11px] text-muted-foreground">
+            LECO Day-Ahead Load Forecasting · Pilot v1 · Synthetic feeder model figures.
           </footer>
         </main>
         )}

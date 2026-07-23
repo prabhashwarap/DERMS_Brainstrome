@@ -79,19 +79,17 @@ function WeatherCard({
   const tMax = Math.max(...temps);
   const peakTemp = points.reduce((a, b) => (b.tempC > a.tempC ? b : a));
 
-  // Six three-hourly blocks — enough to read the day's shape, few enough to
-  // scan without counting.
   const blocks = points.filter((_, i) => i % 16 === 0);
 
   return (
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-2">
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 text-sm">
             <Thermometer className="h-4 w-4 text-muted-foreground" />
-            Weather over the horizon
+            Weather Horizon
           </CardTitle>
-          <Badge variant="muted">Input to model</Badge>
+          <Badge variant="muted" className="text-[10px]">Model Input</Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -101,7 +99,7 @@ function WeatherCard({
             <span className="ml-1 text-sm font-normal text-muted-foreground">°C</span>
           </span>
           <span className="text-xs text-muted-foreground">
-            {hovered ? `at ${formatLKT(hovered.ts)}` : "at horizon start"} · range{" "}
+            {hovered ? formatLKT(hovered.ts) : "start"} · range{" "}
             <span className="tnum">
               {tMin.toFixed(1)}–{tMax.toFixed(1)} °C
             </span>
@@ -164,28 +162,9 @@ function WeatherCard({
 
         <Separator />
 
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          {highSolar ? (
-            <>
-              Cloud cover is the dominant driver here: at{" "}
-              <span className="tnum">
-                {Math.round(bundle.feeder.solarPenetration * 100)}%
-              </span>{" "}
-              rooftop solar, a clear midday suppresses metered load and the evening ramp steepens
-              as generation falls away. The band widens accordingly.
-            </>
-          ) : (
-            <>
-              Temperature is the dominant driver here - cooling load tracks the afternoon and
-              evening. At{" "}
-              <span className="tnum">
-                {Math.round(bundle.feeder.solarPenetration * 100)}%
-              </span>{" "}
-              rooftop solar the midday distortion is small.
-            </>
-          )}{" "}
-          Warmest point: <span className="tnum">{peakTemp.tempC.toFixed(1)} °C</span> at{" "}
-          <span className="tnum">{formatLKT(peakTemp.ts)}</span>.
+        <p className="text-xs leading-normal text-muted-foreground">
+          Driver: {highSolar ? "Cloud cover & PV ramp" : "Cooling load & temp"}. Max:{" "}
+          <span className="tnum font-medium text-foreground">{peakTemp.tempC.toFixed(1)} °C</span> ({formatLKT(peakTemp.ts)}).
         </p>
       </CardContent>
     </Card>
@@ -203,10 +182,10 @@ function FeederCard({ bundle }: { bundle: Bundle }) {
   const solarMW = (firmMW * f.solarPenetration).toFixed(2);
 
   const rows: Array<[string, React.ReactNode]> = [
-    ["Substation & Feeder", `${f.substation} · ${f.shortName}`],
-    ["Rated / Firm Capacity", `${capStr} (${firmMW.toFixed(1)} MW @ ${f.powerFactor} PF)`],
+    ["Substation", `${f.substation}`],
+    ["Firm Capacity", `${capStr} (${firmMW.toFixed(1)} MW)`],
     [
-      "Model Accuracy (28d)",
+      "Accuracy (28d)",
       <span key="mape" className="tnum text-emerald-600 dark:text-emerald-400 font-semibold">
         {bundle.accuracy.mape.toFixed(1)}% MAPE{" "}
         <span className="text-muted-foreground font-normal text-[11px]">
@@ -215,32 +194,32 @@ function FeederCard({ bundle }: { bundle: Bundle }) {
       </span>,
     ],
     [
-      "Forecast Horizon Peak",
+      "Horizon Peak",
       <span key="peak" className="tnum font-medium">
         {mw(bundle.kpis.peakMW)} MW at {formatLKT(bundle.kpis.peakAt)}
       </span>,
     ],
     [
-      "Forecast Min (Trough)",
+      "Horizon Min",
       <span key="min" className="tnum font-medium">
         {mw(bundle.kpis.minMW)} MW at {formatLKT(bundle.kpis.minAt)}
       </span>,
     ],
     [
-      "24h Energy Volume",
+      "24h Energy",
       <span key="energy" className="tnum font-medium">
         {bundle.kpis.energyMWh.toFixed(1)} MWh
       </span>,
     ],
     [
-      "Rooftop Solar Impact",
+      "Rooftop Solar",
       <span key="solar" className="tnum font-medium">
-        ~{Math.round(f.solarPenetration * 100)}% (~{solarMW} MW est. PV)
+        ~{Math.round(f.solarPenetration * 100)}% (~{solarMW} MW)
       </span>,
     ],
     [
-      "Load Mix & Profile",
-      `${f.mix} (${f.profile === "residential" ? "Bimodal peaks" : "Duck curve"})`,
+      "Load Profile",
+      `${f.mix} (${f.profile === "residential" ? "Bimodal" : "Duck curve"})`,
     ],
   ];
 
@@ -248,9 +227,9 @@ function FeederCard({ bundle }: { bundle: Bundle }) {
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-2">
-          <CardTitle>Feeder & Model Characteristics</CardTitle>
+          <CardTitle className="text-sm">Feeder Characteristics</CardTitle>
           <Badge variant="outline" className="text-[10px] font-mono">
-            15-min Resolution
+            15-min
           </Badge>
         </div>
       </CardHeader>
@@ -270,28 +249,19 @@ function FeederCard({ bundle }: { bundle: Bundle }) {
 
 /* ------------------------------------------------------------------ */
 
-/**
- * Headroom against firm capacity. A bar rather than a number because the
- * question it answers — "is the worst case close to the limit?" — is a
- * proportion, and proportions are read faster as length than as digits.
- */
 function CapacityCard({ bundle }: { bundle: Bundle }) {
   const firm = capacityMW(bundle.feeder);
   const expected = firm > 0 ? (bundle.kpis.peakMW / firm) * 100 : 0;
   const upper = firm > 0 ? (bundle.kpis.peakUpperMW / firm) * 100 : 0;
-  const capLabel = bundle.feeder.capacityMVA >= 1
-    ? `${bundle.feeder.capacityMVA.toFixed(1)} MVA`
-    : `${(bundle.feeder.capacityMVA * 1000).toFixed(0)} kVA`;
 
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle>Peak against firm capacity</CardTitle>
+        <CardTitle className="text-sm">Firm Headroom</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2.5">
         <div className="tnum text-xs text-muted-foreground">
-          {mw(bundle.kpis.peakMW)} MW expected · {mw(bundle.kpis.peakUpperMW)} MW worst case ·{" "}
-          {mw(firm)} MW firm ({capLabel} @ {bundle.feeder.powerFactor} pf)
+          {mw(bundle.kpis.peakMW)} MW peak · {mw(bundle.kpis.peakUpperMW)} MW P95 · {mw(firm)} MW firm
         </div>
         <div className="relative h-3 w-full overflow-hidden rounded-full bg-muted">
           <div
@@ -304,8 +274,8 @@ function CapacityCard({ bundle }: { bundle: Bundle }) {
           />
         </div>
         <div className="tnum flex justify-between text-[11px] text-muted-foreground">
-          <span>0</span>
-          <span>{expected.toFixed(0)}% utilised at forecast peak</span>
+          <span>0%</span>
+          <span>{expected.toFixed(0)}% peak load</span>
           <span>{mw(firm)} MW</span>
         </div>
       </CardContent>

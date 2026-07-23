@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import {
   Area,
   CartesianGrid,
@@ -52,6 +53,16 @@ interface Props {
   className?: string;
   /** Optional override for the chart plot height (Tailwind height classes). */
   heightClassName?: string;
+  /** Chart heading. Defaults to the net-load title. */
+  title?: string;
+  /** Sub-heading below the title. Defaults to the feeder + resolution line. */
+  subtitle?: string;
+  /** Label on the firm-capacity reference line. */
+  capacityLabel?: string;
+  /** Render a chevron in the header that collapses the chart body. */
+  collapsible?: boolean;
+  /** When collapsible, start collapsed. */
+  defaultCollapsed?: boolean;
 }
 
 export function buildChartRows(bundle: Bundle, range: RangeKey): ChartRow[] {
@@ -131,7 +142,13 @@ export function ForecastChart({
   onHover,
   className,
   heightClassName = "h-[360px] sm:h-[440px] lg:h-[480px]",
+  title = "Net load - actual and day-ahead forecast",
+  subtitle,
+  capacityLabel = "Firm capacity",
+  collapsible = false,
+  defaultCollapsed = false,
 }: Props) {
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const rows = useMemo(() => buildChartRows(bundle, range), [bundle, range]);
 
   const domain: [number, number] = [rows[0].ts, rows[rows.length - 1].ts];
@@ -170,35 +187,50 @@ export function ForecastChart({
   return (
     <Card className="flex flex-col">
       <div className="flex flex-wrap items-start justify-between gap-3 p-4 pb-2">
-        <div>
-          <h2 className="text-sm font-semibold tracking-tight">
-            Net load - actual and day-ahead forecast
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            {bundle.feeder.name} · 15-minute resolution · MW · Asia/Colombo
-          </p>
+        <div className="flex items-start gap-2 min-w-0">
+          {collapsible && (
+            <button
+              type="button"
+              onClick={() => setCollapsed((c) => !c)}
+              className="mt-0.5 shrink-0 rounded-md p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+              aria-expanded={!collapsed}
+              aria-label={collapsed ? "Expand chart" : "Collapse chart"}
+            >
+              {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+          )}
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
+            <p className="text-xs text-muted-foreground">
+              {subtitle ?? `${bundle.feeder.name} · 15-minute resolution · MW · Asia/Colombo`}
+            </p>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground select-none">
-            <Switch checked={showBaseline} onCheckedChange={onShowBaselineChange} />
-            Show similar-day baseline
-          </label>
-          <Tabs value={range} onValueChange={(v) => onRangeChange(v as RangeKey)}>
-            <TabsList>
-              {(Object.keys(RANGES) as RangeKey[]).map((k) => (
-                <TabsTrigger key={k} value={k}>
-                  {RANGES[k].label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-        </div>
+        {!collapsed && (
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground select-none">
+              <Switch checked={showBaseline} onCheckedChange={onShowBaselineChange} />
+              Show similar-day baseline
+            </label>
+            <Tabs value={range} onValueChange={(v) => onRangeChange(v as RangeKey)}>
+              <TabsList>
+                {(Object.keys(RANGES) as RangeKey[]).map((k) => (
+                  <TabsTrigger key={k} value={k}>
+                    {RANGES[k].label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          </div>
+        )}
       </div>
 
-      <Legend showBaseline={showBaseline} />
+      {collapsed ? null : (
+        <>
+          <Legend showBaseline={showBaseline} />
 
-      <div className={cn(heightClassName, "w-full px-1 pb-3 pr-4", className)}>
+          <div className={cn(heightClassName, "w-full px-1 pb-3 pr-4", className)}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart
             data={rows}
@@ -294,7 +326,7 @@ export function ForecastChart({
                 stroke="var(--viz-divider)"
                 strokeDasharray="2 6"
                 label={{
-                  value: `Firm capacity ${fmtMW(firm)} MW`,
+                  value: `${capacityLabel} ${fmtMW(firm)} MW`,
                   position: "insideTopRight",
                   fill: "var(--viz-axis)",
                   fontSize: 10,
@@ -341,7 +373,9 @@ export function ForecastChart({
             />
           </ComposedChart>
         </ResponsiveContainer>
-      </div>
+          </div>
+        </>
+      )}
     </Card>
   );
 }

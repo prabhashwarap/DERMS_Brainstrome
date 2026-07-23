@@ -245,7 +245,6 @@ export function NodeDetailPanel({ node, onClose, onFilterToNode }: NodeDetailPan
               onHover={setHoverTs}
               heightClassName="h-[240px] sm:h-[280px]"
             />
-            <GenerationEvCharts bundle={bundle} range={range} />
             <ForecastTable bundle={bundle} />
           </div>
 
@@ -253,6 +252,9 @@ export function NodeDetailPanel({ node, onClose, onFilterToNode }: NodeDetailPan
           <ContextPanel bundle={bundle} hoverTs={hoverTs} />
 
         </div>
+
+        {/* Full-width companion forecasts (collapsible) */}
+        <GenerationEvCharts bundle={bundle} />
 
       </div>
     </aside>

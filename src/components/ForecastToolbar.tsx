@@ -58,8 +58,7 @@ export function ForecastToolbar({ feederId, onFeederChange, generatedAt }: Props
             <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
           </span>
           <span className="tnum">
-            Forecast generated {formatLKT(generatedAt, { date: true, time: true })} LKT · next run
-            06:00
+            Generated {formatLKT(generatedAt, { date: true, time: true })} · Next run 06:00 LKT
           </span>
         </div>
       </div>

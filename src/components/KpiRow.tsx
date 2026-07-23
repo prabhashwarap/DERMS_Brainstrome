@@ -72,49 +72,49 @@ export function KpiRow({ bundle }: { bundle: Bundle }) {
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <Tile
-        label="Forecast peak"
+        label="Peak Load"
         value={mw(k.peakMW)}
         unit="MW"
         icon={<Zap className="h-4 w-4" />}
-        help="Highest expected 15-minute net demand over the 24-hour horizon. Sets the capacity that has to be secured."
+        help="Highest expected 15-min net load over 24h horizon."
         footnote={
           <span className="tnum">
-            95% range {mw(k.peakLowerMW)} – {mw(k.peakUpperMW)} MW
+            P95: {mw(k.peakLowerMW)}–{mw(k.peakUpperMW)} MW
           </span>
         }
       />
       <Tile
-        label="Forecast energy"
+        label="Total Energy"
         value={mwh(k.energyMWh)}
         unit="MWh"
         icon={<Gauge className="h-4 w-4" />}
-        help="Area under the forecast curve - the volume to contract for the day. The range is the volume implied by the confidence band."
+        help="Total daily forecasted energy volume."
         footnote={
           <span className="tnum">
-            95% range {mwh(k.energyLowerMWh)} – {mwh(k.energyUpperMWh)} MWh
+            P95: {mwh(k.energyLowerMWh)}–{mwh(k.energyUpperMWh)} MWh
           </span>
         }
       />
       <Tile
-        label="Time of peak"
+        label="Peak Time"
         value={formatLKT(k.peakAt)}
         unit="LKT"
         icon={<Clock className="h-4 w-4" />}
-        help="When the maximum is expected, so purchase blocks can be aligned to it."
+        help="Expected time of maximum daily load."
         footnote={
           <span className="tnum">
-            Trough {mw(k.minMW)} MW at {formatLKT(k.minAt)}
+            Min: {mw(k.minMW)} MW ({formatLKT(k.minAt)})
           </span>
         }
       />
       <Tile
-        label="vs. yesterday"
+        label="vs. Yesterday"
         value={pct(peakDelta)}
         icon={<DeltaIcon className="h-4 w-4" />}
-        help="Forecast peak against yesterday's actual peak. Context for whether the grid is trending hotter or cooler."
+        help="Peak change compared to yesterday's actual peak."
         footnote={
           <span className="tnum">
-            Peak {mw(k.prevPeakMW)} MW · energy {pct(energyDelta)}
+            Prev peak {mw(k.prevPeakMW)} MW · energy {pct(energyDelta)}
           </span>
         }
       />
