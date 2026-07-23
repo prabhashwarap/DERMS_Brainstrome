@@ -43,8 +43,15 @@ export interface MapNodeDetails {
   branchName?: string;
   cscId?: string;
   cscName?: string;
+  substationId?: string;
+  substationName?: string;
   feederId?: string;
   feederName?: string;
+  transformerId?: string;
+  transformerName?: string;
+  consumerId?: string;
+  consumerName?: string;
+  derCombo?: string;
   center?: [number, number];
   status?: "Normal" | "Optimal" | "Peak Load" | "Active";
 }
@@ -91,10 +98,36 @@ function createNodeBundle(node: MapNodeDetails, now: number): Bundle {
 
   // Check if this node directly maps to one of the canonical feeders
   if (feederKey === "angulana" || feederKey === "moratuwa_north_f2" || nameLower.includes("angulana")) {
-    return runForecast(FEEDERS.angulana, now);
+    const base = runForecast(FEEDERS.angulana, now);
+    return {
+      ...base,
+      feeder: {
+        ...base.feeder,
+        nodeType: node.type || "feeder",
+        typeName: node.typeName || "Feeder Line",
+        branchName: node.branchName || "Moratuwa Branch",
+        cscName: node.cscName || "Moratuwa North CSC",
+        substationName: node.substationName || "Angulana Substation",
+        feederName: "Velona / Angulana Feeder",
+        derCombo: "Both Solar PV & EV Charging Active",
+      },
+    };
   }
   if (feederKey === "katunayake" || feederKey === "seeduwa_f2" || nameLower.includes("katunayake")) {
-    return runForecast(FEEDERS.katunayake, now);
+    const base = runForecast(FEEDERS.katunayake, now);
+    return {
+      ...base,
+      feeder: {
+        ...base.feeder,
+        nodeType: node.type || "feeder",
+        typeName: node.typeName || "Feeder Line",
+        branchName: node.branchName || "Negombo Branch",
+        cscName: node.cscName || "Seeduwa CSC",
+        substationName: node.substationName || "Katunayake Substation",
+        feederName: "Seeduwa / Katunayake Feeder",
+        derCombo: "Both Solar PV & EV Charging Active",
+      },
+    };
   }
 
   const h = hashStr(node.id);
@@ -102,22 +135,22 @@ function createNodeBundle(node: MapNodeDetails, now: number): Bundle {
   let firmCap: number;
   switch (node.type) {
     case "branch":
-      firmCap = 85;
+      firmCap = 85.0;
       break;
     case "csc":
-      firmCap = 28;
-      break;
-    case "feeder":
-      firmCap = 12.0;
+      firmCap = 28.0;
       break;
     case "substation":
       firmCap = 24.0;
       break;
+    case "feeder":
+      firmCap = 13.0;
+      break;
     case "transformer":
-      firmCap = 0.50;
+      firmCap = 0.50; // 500 kVA
       break;
     case "meterEndpoint":
-      firmCap = 0.015;
+      firmCap = 0.015; // 15 kVA
       break;
     case "distributedSolar":
       firmCap = 0.025;
@@ -135,34 +168,119 @@ function createNodeBundle(node: MapNodeDetails, now: number): Bundle {
       firmCap = 3.0;
       break;
     default:
-      firmCap = 8.0;
+      firmCap = 10.0;
   }
 
-  const isSolar = node.type === "distributedSolar" || node.type === "utilitySolar";
-  const isEv = node.type === "evse";
-  const isGridAggregate = node.type === "feeder" || node.type === "substation" || node.type === "branch" || node.type === "csc";
-  const isTransformer = node.type === "transformer";
+  // Solar and EV logical rules:
+  // - Substation level: Highly likely to have both EV charging and solar generation.
+  // - Branch/CSC/Feeder: Grid aggregates, highly likely to have both EV charging and solar generation.
+  // - Transformer and Consumer levels: "anything can happen".
+  let hasSolar = false;
+  let hasEvCharging = false;
+  let solarPenetration = 0;
+  let evPenetration = 0;
+  let derCombo = "";
 
-  const hasSolar = isSolar || (isGridAggregate && h % 3 !== 0) || (isTransformer && h % 2 === 0);
-  const hasEvCharging = isEv || (isGridAggregate && h % 2 === 0) || (isTransformer && h % 3 === 0);
+  if (node.type === "substation" || node.type === "branch" || node.type === "csc" || node.type === "feeder") {
+    // Highly likely to have both at substation level & upper network aggregates
+    hasSolar = true;
+    hasEvCharging = true;
+    solarPenetration = node.type === "branch" ? 0.22 : node.type === "csc" ? 0.20 : node.type === "substation" ? 0.25 : 0.18;
+    evPenetration = node.type === "branch" ? 0.16 : node.type === "csc" ? 0.15 : node.type === "substation" ? 0.18 : 0.14;
+    derCombo = "Both Solar PV & EV Charging Active";
+  } else if (node.type === "transformer") {
+    // "in consumer and transformer level anything can happen"
+    const rem = Math.abs(h) % 10;
+    if (rem < 4) {
+      // Both Solar and EV
+      hasSolar = true;
+      hasEvCharging = true;
+      solarPenetration = 0.22;
+      evPenetration = 0.16;
+      derCombo = "Both Solar PV & EV Charging Active";
+    } else if (rem < 7) {
+      // Solar Only
+      hasSolar = true;
+      hasEvCharging = false;
+      solarPenetration = 0.28;
+      evPenetration = 0;
+      derCombo = "Rooftop Solar PV Only";
+    } else if (rem < 9) {
+      // EV Only
+      hasSolar = false;
+      hasEvCharging = true;
+      solarPenetration = 0;
+      evPenetration = 0.22;
+      derCombo = "EV Charging Only";
+    } else {
+      // Standard load only (neither)
+      hasSolar = false;
+      hasEvCharging = false;
+      solarPenetration = 0;
+      evPenetration = 0;
+      derCombo = "Standard Load Only (No DER)";
+    }
+  } else if (node.type === "meterEndpoint") {
+    // "in consumer and transformer level anything can happen"
+    const rem = Math.abs(h) % 10;
+    if (rem < 3) {
+      hasSolar = true;
+      hasEvCharging = false;
+      solarPenetration = 0.45;
+      evPenetration = 0;
+      derCombo = "Rooftop Solar PV (Net Metering)";
+    } else if (rem < 5) {
+      hasSolar = false;
+      hasEvCharging = true;
+      solarPenetration = 0;
+      evPenetration = 0.50;
+      derCombo = "EV Charger (7.4kW Wallbox)";
+    } else if (rem < 7) {
+      hasSolar = true;
+      hasEvCharging = true;
+      solarPenetration = 0.35;
+      evPenetration = 0.40;
+      derCombo = "Solar PV + EV Charger";
+    } else if (rem < 8) {
+      hasSolar = true;
+      hasEvCharging = false;
+      solarPenetration = 0.30;
+      evPenetration = 0;
+      derCombo = "Battery Storage (BESS)";
+    } else {
+      hasSolar = false;
+      hasEvCharging = false;
+      solarPenetration = 0;
+      evPenetration = 0;
+      derCombo = "Standard Consumer (No DER)";
+    }
+  } else if (node.type === "distributedSolar" || node.type === "utilitySolar") {
+    hasSolar = true;
+    hasEvCharging = false;
+    solarPenetration = 0.85;
+    evPenetration = 0;
+    derCombo = "Solar Generation Unit";
+  } else if (node.type === "evse") {
+    hasSolar = false;
+    hasEvCharging = true;
+    solarPenetration = 0;
+    evPenetration = 0.80;
+    derCombo = "EV Charging Station";
+  } else if (node.type === "distributedBattery" || node.type === "utilityBattery") {
+    hasSolar = false;
+    hasEvCharging = false;
+    solarPenetration = 0;
+    evPenetration = 0;
+    derCombo = "Battery Energy Storage (BESS)";
+  } else {
+    hasSolar = true;
+    hasEvCharging = true;
+    solarPenetration = 0.15;
+    evPenetration = 0.10;
+    derCombo = "Grid Endpoint";
+  }
 
-  const solarPenetration = hasSolar
-    ? isSolar
-      ? 0.85
-      : isGridAggregate
-      ? 0.22
-      : 0.12
-    : 0;
-
-  const evPenetration = hasEvCharging
-    ? isEv
-      ? 0.75
-      : isGridAggregate
-      ? 0.16
-      : 0.10
-    : 0;
-
-  const profile: "residential" | "industrial" = isSolar
+  const profile: "residential" | "industrial" = (node.type === "distributedSolar" || node.type === "utilitySolar")
     ? "industrial"
     : (h % 2 === 0 ? "residential" : "industrial");
 
@@ -170,8 +288,8 @@ function createNodeBundle(node: MapNodeDetails, now: number): Bundle {
     id: node.id,
     name: node.name,
     shortName: node.name,
-    substation: node.cscName ? `${node.cscName} CSC` : node.branchName ? `${node.branchName} Branch` : "LECO Network",
-    capacityMVA: Number((firmCap / 0.95).toFixed(2)),
+    substation: node.substationName || (node.cscName ? `${node.cscName} Substation` : "LECO Network"),
+    capacityMVA: Number((firmCap / 0.95).toFixed(3)),
     powerFactor: 0.95,
     solarPenetration,
     evPenetration,
@@ -181,6 +299,15 @@ function createNodeBundle(node: MapNodeDetails, now: number): Bundle {
     profile,
     mix: node.typeName,
     seed: Math.abs(h) || 20260101,
+    nodeType: node.type,
+    typeName: node.typeName,
+    branchName: node.branchName,
+    cscName: node.cscName,
+    substationName: node.substationName,
+    feederName: node.feederName,
+    transformerName: node.transformerName,
+    consumerName: node.consumerName || (node.type === "meterEndpoint" ? node.name : undefined),
+    derCombo: node.derCombo || derCombo,
   };
 
   return runForecast(feeder, now);

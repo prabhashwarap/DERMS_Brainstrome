@@ -183,55 +183,138 @@ const FeederCard = memo(function FeederCard({ bundle }: { bundle: Bundle }) {
   const capStr = f.capacityMVA >= 1
     ? `${f.capacityMVA.toFixed(1)} MVA`
     : `${(f.capacityMVA * 1000).toFixed(0)} kVA`;
-  const solarMW = (firmMW * f.solarPenetration).toFixed(2);
+  
+  const formattedCap = firmMW >= 1 ? `${firmMW.toFixed(1)} MW` : `${(firmMW * 1000).toFixed(0)} kW`;
+  const solarVal = firmMW >= 1 ? (firmMW * f.solarPenetration).toFixed(2) + " MW" : ((firmMW * f.solarPenetration) * 1000).toFixed(1) + " kW";
+  const evVal = f.evPenetration ? (firmMW >= 1 ? (firmMW * f.evPenetration).toFixed(2) + " MW" : ((firmMW * f.evPenetration) * 1000).toFixed(1) + " kW") : null;
 
-  const rows: Array<[string, React.ReactNode]> = [
-    ["Substation", `${f.substation}`],
-    ["Firm Capacity", `${capStr} (${firmMW.toFixed(1)} MW)`],
-    [
-      "Accuracy (28d)",
-      <span key="mape" className="tnum text-emerald-600 dark:text-emerald-400 font-semibold">
-        {bundle.accuracy.mape.toFixed(1)}% MAPE{" "}
-        <span className="text-muted-foreground font-normal text-[11px]">
-          (MAE {mw(bundle.accuracy.maeMW)} MW)
-        </span>
+  // Build hierarchy connection breadcrumb: Branch -> CSC -> Substation -> Feeder -> Transformer -> Consumer
+  const hierarchyParts: string[] = [];
+  if (f.branchName) hierarchyParts.push(f.branchName.endsWith("Branch") ? f.branchName : `${f.branchName} Branch`);
+  if (f.cscName) hierarchyParts.push(f.cscName.endsWith("CSC") ? f.cscName : `${f.cscName} CSC`);
+  if (f.substationName) hierarchyParts.push(f.substationName.endsWith("Substation") ? f.substationName : `${f.substationName} Substation`);
+  if (f.feederName && f.nodeType !== "substation" && f.nodeType !== "csc" && f.nodeType !== "branch") {
+    hierarchyParts.push(f.feederName.endsWith("Feeder") ? f.feederName : `${f.feederName} Feeder`);
+  }
+  if (f.transformerName && (f.nodeType === "transformer" || f.nodeType === "meterEndpoint" || f.nodeType === "distributedSolar" || f.nodeType === "evse" || f.nodeType === "distributedBattery")) {
+    hierarchyParts.push(f.transformerName);
+  }
+  if (f.consumerName && (f.nodeType === "meterEndpoint" || f.nodeType === "distributedSolar" || f.nodeType === "evse" || f.nodeType === "distributedBattery")) {
+    hierarchyParts.push(f.consumerName);
+  }
+
+  // Dynamic Card Title based on Node Type
+  const nodeTypeTitles: Record<string, string> = {
+    branch: "Branch Details",
+    csc: "CSC Details",
+    substation: "Substation Details",
+    feeder: "Feeder Details",
+    transformer: "Transformer Details",
+    meterEndpoint: "Consumer Details",
+    consumer: "Consumer Details",
+    distributedSolar: "Solar PV Details",
+    utilitySolar: "Utility Solar Details",
+    evse: "EV Charger Details",
+    distributedBattery: "Battery Details",
+    utilityBattery: "Battery Details",
+    recloser: "Recloser Details",
+  };
+
+  const cardTitle = f.nodeType
+    ? (nodeTypeTitles[f.nodeType] || `${f.typeName || "Node"} Details`)
+    : "Feeder Details";
+
+  const rows: Array<[string, React.ReactNode]> = [];
+
+  if (hierarchyParts.length > 0) {
+    rows.push([
+      "Hierarchy",
+      <span key="hierarchy" className="text-[11px] font-medium text-foreground leading-tight block">
+        {hierarchyParts.join(" → ")}
       </span>,
-    ],
-    [
-      "Horizon Peak",
-      <span key="peak" className="tnum font-medium">
-        {mw(bundle.kpis.peakMW)} MW at {formatLKT(bundle.kpis.peakAt)}
+    ]);
+  } else {
+    rows.push(["Substation", `${f.substation}`]);
+  }
+
+  rows.push(["Firm Capacity", `${capStr} (${formattedCap})`]);
+
+  rows.push([
+    "Accuracy (28d)",
+    <span key="mape" className="tnum text-emerald-600 dark:text-emerald-400 font-semibold">
+      {bundle.accuracy.mape.toFixed(1)}% MAPE{" "}
+      <span className="text-muted-foreground font-normal text-[11px]">
+        (MAE {mw(bundle.accuracy.maeMW)} MW)
+      </span>
+    </span>,
+  ]);
+
+  rows.push([
+    "Horizon Peak",
+    <span key="peak" className="tnum font-medium">
+      {mw(bundle.kpis.peakMW)} MW at {formatLKT(bundle.kpis.peakAt)}
+    </span>,
+  ]);
+
+  rows.push([
+    "Horizon Min",
+    <span key="min" className="tnum font-medium">
+      {mw(bundle.kpis.minMW)} MW at {formatLKT(bundle.kpis.minAt)}
+    </span>,
+  ]);
+
+  rows.push([
+    "24h Energy",
+    <span key="energy" className="tnum font-medium">
+      {bundle.kpis.energyMWh.toFixed(1)} MWh
+    </span>,
+  ]);
+
+  if (f.derCombo) {
+    rows.push([
+      "DER Status",
+      <span key="derCombo" className="tnum font-semibold text-primary">
+        {f.derCombo}
       </span>,
-    ],
-    [
-      "Horizon Min",
-      <span key="min" className="tnum font-medium">
-        {mw(bundle.kpis.minMW)} MW at {formatLKT(bundle.kpis.minAt)}
-      </span>,
-    ],
-    [
-      "24h Energy",
-      <span key="energy" className="tnum font-medium">
-        {bundle.kpis.energyMWh.toFixed(1)} MWh
-      </span>,
-    ],
-    [
-      "Rooftop Solar",
-      <span key="solar" className="tnum font-medium">
-        ~{Math.round(f.solarPenetration * 100)}% (~{solarMW} MW)
-      </span>,
-    ],
-    [
-      "Load Profile",
-      `${f.mix} (${f.profile === "residential" ? "Bimodal" : "Duck curve"})`,
-    ],
-  ];
+    ]);
+  }
+
+  rows.push([
+    "Rooftop Solar",
+    f.hasSolar ? (
+      <span key="solar" className="tnum font-medium text-amber-600 dark:text-amber-400">
+        Active (~{Math.round(f.solarPenetration * 100)}% / ~{solarVal})
+      </span>
+    ) : (
+      <span key="solar" className="text-muted-foreground italic">
+        None Detected
+      </span>
+    ),
+  ]);
+
+  rows.push([
+    "EV Charging",
+    f.hasEvCharging ? (
+      <span key="ev" className="tnum font-medium text-emerald-600 dark:text-emerald-400">
+        Active (~{Math.round((f.evPenetration || 0) * 100)}% / ~{evVal})
+      </span>
+    ) : (
+      <span key="ev" className="text-muted-foreground italic">
+        None Detected
+      </span>
+    ),
+  ]);
+
+  rows.push([
+    "Load Profile",
+    `${f.mix} (${f.profile === "residential" ? "Bimodal" : "Duck curve"})`,
+  ]);
 
   return (
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-sm">Feeder Characteristics</CardTitle>
+          <CardTitle className="text-sm">{cardTitle}</CardTitle>
           <Badge variant="outline" className="text-[10px] font-mono">
             15-min
           </Badge>

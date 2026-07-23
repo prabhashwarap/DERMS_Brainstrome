@@ -52,9 +52,11 @@ const feederIcon = createCustomIcon(<Waypoints className="w-3.5 h-3.5 text-rose-
 
 // LECO Grid Hierarchy: Branch -> CSC (Consumer Service Center) -> Feeder
 // Source: Lanka Electricity Company (LECO) branch/CSC network (leco.lk).
+// LECO Grid Hierarchy: Branch -> CSC (Consumer Service Center) -> Substation -> Feeder -> Transformer -> Consumer
+// Source: Lanka Electricity Company (LECO) branch/CSC network (leco.lk).
 // LECO operates 7 branches covering the urban Western & Southern coastal belt.
 type Feeder = { id: string; name: string };
-type Csc = { id: string; name: string; center: [number, number]; feeders: Feeder[] };
+type Csc = { id: string; name: string; center: [number, number]; substationName: string; feeders: Feeder[] };
 type Branch = { id: string; name: string; center: [number, number]; cscs: Csc[] };
 
 const LECO_DATA: { branches: Branch[] } = {
@@ -64,9 +66,9 @@ const LECO_DATA: { branches: Branch[] } = {
       name: "Kotte",
       center: [6.9089, 79.8936],
       cscs: [
-        { id: "pitakotte", name: "Pita Kotte", center: [6.8869, 79.9036], feeders: [{ id: "pitakotte_f1", name: "Pita Kotte" }, { id: "pitakotte_f2", name: "Nawala" }] },
-        { id: "kolonnawa", name: "Kolonnawa", center: [6.9333, 79.8853], feeders: [{ id: "kolonnawa_f1", name: "Kolonnawa" }, { id: "kolonnawa_f2", name: "Wellampitiya" }] },
-        { id: "kotikawatta", name: "Kotikawatta", center: [6.9430, 79.8994], feeders: [{ id: "kotikawatta_f1", name: "Kotikawatta" }, { id: "kotikawatta_f2", name: "Angoda" }] },
+        { id: "pitakotte", name: "Pita Kotte", center: [6.8869, 79.9036], substationName: "Pita Kotte Substation", feeders: [{ id: "pitakotte_f1", name: "Pita Kotte" }, { id: "pitakotte_f2", name: "Nawala" }] },
+        { id: "kolonnawa", name: "Kolonnawa", center: [6.9333, 79.8853], substationName: "Kolonnawa Substation", feeders: [{ id: "kolonnawa_f1", name: "Kolonnawa" }, { id: "kolonnawa_f2", name: "Wellampitiya" }] },
+        { id: "kotikawatta", name: "Kotikawatta", center: [6.9430, 79.8994], substationName: "Kotikawatta Substation", feeders: [{ id: "kotikawatta_f1", name: "Kotikawatta" }, { id: "kotikawatta_f2", name: "Angoda" }] },
       ],
     },
     {
@@ -74,9 +76,9 @@ const LECO_DATA: { branches: Branch[] } = {
       name: "Nugegoda",
       center: [6.8649, 79.8990],
       cscs: [
-        { id: "boralesgamuwa", name: "Boralesgamuwa", center: [6.8411, 79.9020], feeders: [{ id: "boralesgamuwa_f1", name: "Boralesgamuwa" }, { id: "boralesgamuwa_f2", name: "Katuwawala" }] },
-        { id: "nugegoda_csc", name: "Nugegoda", center: [6.8724, 79.8890], feeders: [{ id: "nugegoda_f1", name: "Nugegoda Town" }, { id: "nugegoda_f2", name: "Delkanda" }] },
-        { id: "maharagama", name: "Maharagama", center: [6.8480, 79.9265], feeders: [{ id: "maharagama_f1", name: "Maharagama" }, { id: "maharagama_f2", name: "Pannipitiya" }] },
+        { id: "boralesgamuwa", name: "Boralesgamuwa", center: [6.8411, 79.9020], substationName: "Boralesgamuwa Substation", feeders: [{ id: "boralesgamuwa_f1", name: "Boralesgamuwa" }, { id: "boralesgamuwa_f2", name: "Katuwawala" }] },
+        { id: "nugegoda_csc", name: "Nugegoda", center: [6.8724, 79.8890], substationName: "Nugegoda Substation", feeders: [{ id: "nugegoda_f1", name: "Nugegoda Town" }, { id: "nugegoda_f2", name: "Delkanda" }] },
+        { id: "maharagama", name: "Maharagama", center: [6.8480, 79.9265], substationName: "Maharagama Substation", feeders: [{ id: "maharagama_f1", name: "Maharagama" }, { id: "maharagama_f2", name: "Pannipitiya" }] },
       ],
     },
     {
@@ -84,10 +86,10 @@ const LECO_DATA: { branches: Branch[] } = {
       name: "Kelaniya",
       center: [6.9614, 79.9186],
       cscs: [
-        { id: "dalugama", name: "Dalugama", center: [6.9614, 79.9186], feeders: [{ id: "dalugama_f1", name: "Dalugama" }, { id: "dalugama_f2", name: "Kiribathgoda" }] },
-        { id: "mahara", name: "Mahara", center: [7.0130, 79.9490], feeders: [{ id: "mahara_f1", name: "Mahara" }, { id: "mahara_f2", name: "Kadawatha" }] },
-        { id: "kandana", name: "Kandana", center: [7.0470, 79.8940], feeders: [{ id: "kandana_f1", name: "Kandana" }, { id: "kandana_f2", name: "Ragama" }] },
-        { id: "wattala", name: "Wattala", center: [6.9892, 79.8925], feeders: [{ id: "wattala_f1", name: "Wattala" }, { id: "wattala_f2", name: "Hendala" }] },
+        { id: "dalugama", name: "Dalugama", center: [6.9614, 79.9186], substationName: "Dalugama Substation", feeders: [{ id: "dalugama_f1", name: "Dalugama" }, { id: "dalugama_f2", name: "Kiribathgoda" }] },
+        { id: "mahara", name: "Mahara", center: [7.0130, 79.9490], substationName: "Mahara Substation", feeders: [{ id: "mahara_f1", name: "Mahara" }, { id: "mahara_f2", name: "Kadawatha" }] },
+        { id: "kandana", name: "Kandana", center: [7.0470, 79.8940], substationName: "Kandana Substation", feeders: [{ id: "kandana_f1", name: "Kandana" }, { id: "kandana_f2", name: "Ragama" }] },
+        { id: "wattala", name: "Wattala", center: [6.9892, 79.8925], substationName: "Wattala Substation", feeders: [{ id: "wattala_f1", name: "Wattala" }, { id: "wattala_f2", name: "Hendala" }] },
       ],
     },
     {
@@ -95,10 +97,10 @@ const LECO_DATA: { branches: Branch[] } = {
       name: "Moratuwa",
       center: [6.7730, 79.8820],
       cscs: [
-        { id: "moratuwa_north", name: "Moratuwa North", center: [6.7900, 79.8860], feeders: [{ id: "moratuwa_north_f1", name: "Rawatawatta" }, { id: "moratuwa_north_f2", name: "Angulana" }] },
-        { id: "moratuwa_south", name: "Moratuwa South", center: [6.7600, 79.8810], feeders: [{ id: "moratuwa_south_f1", name: "Katubedda" }, { id: "moratuwa_south_f2", name: "Koralawella" }] },
-        { id: "keselwatta", name: "Keselwatta", center: [6.7150, 79.9010], feeders: [{ id: "keselwatta_f1", name: "Keselwatta" }, { id: "keselwatta_f2", name: "Wekada" }] },
-        { id: "panadura", name: "Panadura", center: [6.7130, 79.9070], feeders: [{ id: "panadura_f1", name: "Panadura Town" }, { id: "panadura_f2", name: "Walana" }] },
+        { id: "moratuwa_north", name: "Moratuwa North", center: [6.7900, 79.8860], substationName: "Angulana Substation", feeders: [{ id: "moratuwa_north_f1", name: "Rawatawatta" }, { id: "moratuwa_north_f2", name: "Angulana" }] },
+        { id: "moratuwa_south", name: "Moratuwa South", center: [6.7600, 79.8810], substationName: "Moratuwa South Substation", feeders: [{ id: "moratuwa_south_f1", name: "Katubedda" }, { id: "moratuwa_south_f2", name: "Koralawella" }] },
+        { id: "keselwatta", name: "Keselwatta", center: [6.7150, 79.9010], substationName: "Keselwatta Substation", feeders: [{ id: "keselwatta_f1", name: "Keselwatta" }, { id: "keselwatta_f2", name: "Wekada" }] },
+        { id: "panadura", name: "Panadura", center: [6.7130, 79.9070], substationName: "Panadura Substation", feeders: [{ id: "panadura_f1", name: "Panadura Town" }, { id: "panadura_f2", name: "Walana" }] },
       ],
     },
     {
@@ -106,9 +108,9 @@ const LECO_DATA: { branches: Branch[] } = {
       name: "Kalutara",
       center: [6.5854, 79.9607],
       cscs: [
-        { id: "payagala", name: "Payagala", center: [6.5170, 79.9800], feeders: [{ id: "payagala_f1", name: "Payagala" }, { id: "payagala_f2", name: "Maggona" }] },
-        { id: "kalutara_csc", name: "Kalutara", center: [6.5854, 79.9607], feeders: [{ id: "kalutara_f1", name: "Kalutara North" }, { id: "kalutara_f2", name: "Kalutara South" }] },
-        { id: "aluthgama", name: "Aluthgama", center: [6.4310, 79.9970], feeders: [{ id: "aluthgama_f1", name: "Aluthgama" }, { id: "aluthgama_f2", name: "Beruwala" }] },
+        { id: "payagala", name: "Payagala", center: [6.5170, 79.9800], substationName: "Payagala Substation", feeders: [{ id: "payagala_f1", name: "Payagala" }, { id: "payagala_f2", name: "Maggona" }] },
+        { id: "kalutara_csc", name: "Kalutara", center: [6.5854, 79.9607], substationName: "Kalutara Substation", feeders: [{ id: "kalutara_f1", name: "Kalutara North" }, { id: "kalutara_f2", name: "Kalutara South" }] },
+        { id: "aluthgama", name: "Aluthgama", center: [6.4310, 79.9970], substationName: "Aluthgama Substation", feeders: [{ id: "aluthgama_f1", name: "Aluthgama" }, { id: "aluthgama_f2", name: "Beruwala" }] },
       ],
     },
     {
@@ -116,9 +118,9 @@ const LECO_DATA: { branches: Branch[] } = {
       name: "Negombo",
       center: [7.2083, 79.8358],
       cscs: [
-        { id: "negombo_csc", name: "Negombo", center: [7.2083, 79.8358], feeders: [{ id: "negombo_f1", name: "Negombo Town" }, { id: "negombo_f2", name: "Kochchikade" }] },
-        { id: "seeduwa", name: "Seeduwa", center: [7.1400, 79.8770], feeders: [{ id: "seeduwa_f1", name: "Seeduwa" }, { id: "seeduwa_f2", name: "Katunayake" }] },
-        { id: "jaela", name: "Ja-Ela", center: [7.0744, 79.8920], feeders: [{ id: "jaela_f1", name: "Ja-Ela" }, { id: "jaela_f2", name: "Ekala" }] },
+        { id: "negombo_csc", name: "Negombo", center: [7.2083, 79.8358], substationName: "Negombo Substation", feeders: [{ id: "negombo_f1", name: "Negombo Town" }, { id: "negombo_f2", name: "Kochchikade" }] },
+        { id: "seeduwa", name: "Seeduwa", center: [7.1400, 79.8770], substationName: "Katunayake Substation", feeders: [{ id: "seeduwa_f1", name: "Seeduwa" }, { id: "seeduwa_f2", name: "Katunayake" }] },
+        { id: "jaela", name: "Ja-Ela", center: [7.0744, 79.8920], substationName: "Ja-Ela Substation", feeders: [{ id: "jaela_f1", name: "Ja-Ela" }, { id: "jaela_f2", name: "Ekala" }] },
       ],
     },
     {
@@ -126,9 +128,9 @@ const LECO_DATA: { branches: Branch[] } = {
       name: "Galle",
       center: [6.0535, 80.2170],
       cscs: [
-        { id: "ambalangoda", name: "Ambalangoda", center: [6.2354, 80.0538], feeders: [{ id: "ambalangoda_f1", name: "Ambalangoda" }, { id: "ambalangoda_f2", name: "Balapitiya" }] },
-        { id: "hikkaduwa", name: "Hikkaduwa", center: [6.1395, 80.1006], feeders: [{ id: "hikkaduwa_f1", name: "Hikkaduwa" }, { id: "hikkaduwa_f2", name: "Dodanduwa" }] },
-        { id: "galle_csc", name: "Galle", center: [6.0535, 80.2170], feeders: [{ id: "galle_f1", name: "Galle Fort" }, { id: "galle_f2", name: "Karapitiya" }] },
+        { id: "ambalangoda", name: "Ambalangoda", center: [6.2354, 80.0538], substationName: "Ambalangoda Substation", feeders: [{ id: "ambalangoda_f1", name: "Ambalangoda" }, { id: "ambalangoda_f2", name: "Balapitiya" }] },
+        { id: "hikkaduwa", name: "Hikkaduwa", center: [6.1395, 80.1006], substationName: "Hikkaduwa Substation", feeders: [{ id: "hikkaduwa_f1", name: "Hikkaduwa" }, { id: "hikkaduwa_f2", name: "Dodanduwa" }] },
+        { id: "galle_csc", name: "Galle", center: [6.0535, 80.2170], substationName: "Galle Substation", feeders: [{ id: "galle_f1", name: "Galle Fort" }, { id: "galle_f2", name: "Karapitiya" }] },
       ],
     },
   ],
@@ -172,6 +174,42 @@ function feederMetrics(feederId: string): { peak: number; energy: number; peakHo
   const solarPen = 0.05 + ((h >> 7) % 31) / 100;
   const solar = peak * solarPen * 5.5;
   return { peak, energy, peakHour, solar };
+}
+
+/** One tile in the map summary strip: icon chip, label, and a big value. */
+function StatTile({
+  icon,
+  tint,
+  label,
+  value,
+  unit,
+  valueClass,
+}: {
+  icon: React.ReactNode;
+  tint: string;
+  label: string;
+  value: string;
+  unit?: string;
+  valueClass?: string;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-border/60 bg-muted/30 p-3 min-w-0">
+      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md ${tint}`}>
+        {icon}
+      </span>
+      <div className="flex min-w-0 flex-col">
+        <span className="truncate text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          {label}
+        </span>
+        <span className="flex items-baseline gap-1">
+          <span className={`text-lg font-bold leading-tight tabular-nums ${valueClass ?? ""}`}>
+            {value}
+          </span>
+          {unit && <span className="text-xs font-medium text-muted-foreground">{unit}</span>}
+        </span>
+      </div>
+    </div>
+  );
 }
 
 interface LayerVisibility {
@@ -348,6 +386,8 @@ export function ForecastPlusMap() {
           id: f.id,
           name: f.name,
           csc: selectedCsc.name,
+          substationName: selectedCsc.substationName,
+          branchName: selectedBranch?.name,
           center: feederCenter(selectedCsc.center, f.id),
         }))
       : [];
@@ -365,6 +405,7 @@ export function ForecastPlusMap() {
     const sites: Array<{
       feederId: string;
       feederName: string;
+      substationName: string;
       cscName: string;
       branchName: string;
       center: [number, number];
@@ -376,6 +417,7 @@ export function ForecastPlusMap() {
         feeders.forEach(f => sites.push({
           feederId: f.id,
           feederName: f.name,
+          substationName: c.substationName,
           cscName: c.name,
           branchName: b.name,
           center: feederCenter(c.center, f.id),
@@ -413,7 +455,16 @@ export function ForecastPlusMap() {
       const [cLat, cLng] = s.center;
       // Distribution transformers arranged in a ring around the feeder
       // substation, so the MV feeder lines fan out across the street network.
-      const transformers: Array<{ id: string; pos: [number, number]; name: string }> = [];
+      const transformers: Array<{
+        id: string;
+        pos: [number, number];
+        name: string;
+        substationName: string;
+        cscName: string;
+        branchName: string;
+        feederId: string;
+        feederName: string;
+      }> = [];
       for (let i = 0; i < detail.txPerSite; i++) {
         const angle = (i / detail.txPerSite) * Math.PI * 2 + (si + seed) * 0.15;
         const ring = 0.0026 + ((i + seed) % 3) * 0.0011;
@@ -421,6 +472,11 @@ export function ForecastPlusMap() {
           id: `${s.feederId}-t${i + 1}`,
           pos: [cLat + Math.sin(angle) * ring, cLng + Math.cos(angle) * ring],
           name: `${s.feederName} Tx ${String(i + 1).padStart(2, "0")}`,
+          substationName: s.substationName,
+          cscName: s.cscName,
+          branchName: s.branchName,
+          feederId: s.feederId,
+          feederName: s.feederName,
         });
       }
       return { ...s, substation: s.center, transformers };
@@ -513,14 +569,21 @@ export function ForecastPlusMap() {
       pos: [number, number];
       roadPoint: [number, number];
       der?: "solar" | "ev" | "battery";
+      branchName: string;
+      cscName: string;
+      substationName: string;
+      feederId: string;
+      feederName: string;
+      transformerId: string;
+      transformerName: string;
     }> = [];
     if (!detail.showMeters) return out;
 
     let cId = 0;
     const allTransformers = baseGrid.flatMap(site =>
-      site.transformers.map(t => ({ substation: site.substation, t }))
+      site.transformers.map(t => ({ site, substation: site.substation, t }))
     );
-    allTransformers.forEach(({ substation, t }) => {
+    allTransformers.forEach(({ site, substation, t }) => {
       const path = roadRoutes[routeKey(substation, t.pos)] || fallbackRoute(substation, t.pos);
       if (path.length < 2) return;
 
@@ -558,7 +621,19 @@ export function ForecastPlusMap() {
         else if ((cId + seed) % 9 === 0) der = "ev";
         else if ((cId + seed) % 13 === 0) der = "battery";
 
-        out.push({ id: `meter-${cId++}`, pos: [houseLat, houseLng], roadPoint: [rLat, rLng], der });
+        out.push({
+          id: `meter-${cId++}`,
+          pos: [houseLat, houseLng],
+          roadPoint: [rLat, rLng],
+          der,
+          branchName: site.branchName,
+          cscName: site.cscName,
+          substationName: site.substationName,
+          feederId: site.feederId,
+          feederName: site.feederName,
+          transformerId: t.id,
+          transformerName: t.name,
+        });
       }
     });
     return out;
@@ -664,7 +739,7 @@ export function ForecastPlusMap() {
                 type: "branch",
                 typeName: "Branch HQ",
                 branchId: b.id,
-                branchName: b.name,
+                branchName: `${b.name} Branch`,
                 center: b.center,
                 status: "Normal"
               };
@@ -698,7 +773,8 @@ export function ForecastPlusMap() {
                 type: "csc",
                 typeName: "CSC HQ",
                 cscId: c.id,
-                cscName: c.name,
+                cscName: `${c.name} CSC`,
+                substationName: c.substationName,
                 center: c.center,
                 status: "Normal"
               };
@@ -731,9 +807,11 @@ export function ForecastPlusMap() {
                 name: `${f.name} Feeder`,
                 type: "feeder",
                 typeName: "Feeder Line",
+                branchName: f.branchName ? `${f.branchName} Branch` : undefined,
+                cscName: f.csc ? `${f.csc} CSC` : undefined,
+                substationName: f.substationName,
                 feederId: f.id,
                 feederName: f.name,
-                cscName: f.csc,
                 center: f.center,
                 status: "Normal"
               };
@@ -777,6 +855,7 @@ export function ForecastPlusMap() {
                         typeName: "11kV Distribution Line",
                         branchName: site.branchName,
                         cscName: site.cscName,
+                        substationName: site.substationName,
                         feederName: site.feederName,
                         status: "Normal"
                       })
@@ -799,11 +878,12 @@ export function ForecastPlusMap() {
             {layers.substation && baseGrid.map(site => {
               const nodeData: MapNodeDetails = {
                 id: `sub-${site.feederId}`,
-                name: `${site.feederName} Substation`,
+                name: site.substationName,
                 type: "substation",
                 typeName: "Primary Substation",
                 branchName: site.branchName,
                 cscName: site.cscName,
+                substationName: site.substationName,
                 feederName: site.feederName,
                 center: site.substation,
                 status: "Normal"
@@ -816,7 +896,7 @@ export function ForecastPlusMap() {
                   eventHandlers={{ click: () => setSelectedNode(nodeData) }}
                 >
                   <Popup>
-                    <div className="text-xs font-semibold">{site.feederName} Substation</div>
+                    <div className="text-xs font-semibold">{site.substationName}</div>
                     <div className="text-[11px] text-muted-foreground">{site.cscName} CSC &middot; {site.branchName} Branch</div>
                     <div className="text-[11px] text-muted-foreground font-mono mb-1.5">ID: SUB-{site.feederId.toUpperCase()}</div>
                     <button
@@ -841,7 +921,11 @@ export function ForecastPlusMap() {
                   typeName: "Distribution Transformer",
                   branchName: site.branchName,
                   cscName: site.cscName,
+                  substationName: site.substationName,
+                  feederId: site.feederId,
                   feederName: site.feederName,
+                  transformerId: t.id,
+                  transformerName: t.name,
                   center: t.pos,
                   status: "Optimal"
                 };
@@ -874,7 +958,16 @@ export function ForecastPlusMap() {
                 id: c.id,
                 name: `AMI Smart Meter (${c.id})`,
                 type: "meterEndpoint",
-                typeName: "Smart Meter Endpoint",
+                typeName: "Smart Meter Consumer",
+                branchName: c.branchName,
+                cscName: c.cscName,
+                substationName: c.substationName,
+                feederId: c.feederId,
+                feederName: c.feederName,
+                transformerId: c.transformerId,
+                transformerName: c.transformerName,
+                consumerId: c.id,
+                consumerName: `AMI Meter (${c.id})`,
                 center: c.pos,
                 status: "Normal"
               };
@@ -883,6 +976,15 @@ export function ForecastPlusMap() {
                 name: `Rooftop Solar PV (${c.id})`,
                 type: "distributedSolar",
                 typeName: "Distributed Solar PV",
+                branchName: c.branchName,
+                cscName: c.cscName,
+                substationName: c.substationName,
+                feederId: c.feederId,
+                feederName: c.feederName,
+                transformerId: c.transformerId,
+                transformerName: c.transformerName,
+                consumerId: c.id,
+                consumerName: `Consumer (${c.id})`,
                 center: c.pos,
                 status: "Active"
               };
@@ -891,6 +993,15 @@ export function ForecastPlusMap() {
                 name: `EV Charger EVSE (${c.id})`,
                 type: "evse",
                 typeName: "EV Fast Charger",
+                branchName: c.branchName,
+                cscName: c.cscName,
+                substationName: c.substationName,
+                feederId: c.feederId,
+                feederName: c.feederName,
+                transformerId: c.transformerId,
+                transformerName: c.transformerName,
+                consumerId: c.id,
+                consumerName: `Consumer (${c.id})`,
                 center: c.pos,
                 status: "Active"
               };
@@ -899,6 +1010,15 @@ export function ForecastPlusMap() {
                 name: `Battery Storage BESS (${c.id})`,
                 type: "distributedBattery",
                 typeName: "Distributed Battery BESS",
+                branchName: c.branchName,
+                cscName: c.cscName,
+                substationName: c.substationName,
+                feederId: c.feederId,
+                feederName: c.feederName,
+                transformerId: c.transformerId,
+                transformerName: c.transformerName,
+                consumerId: c.id,
+                consumerName: `Consumer (${c.id})`,
                 center: c.pos,
                 status: "Optimal"
               };
@@ -1048,7 +1168,7 @@ export function ForecastPlusMap() {
         </div>
 
         {/* Summary Panel */}
-        <div className="bg-card p-4 rounded-lg border border-border flex-1 lg:max-w-2xl shadow-sm">
+        <div className="bg-card p-4 rounded-lg border border-border flex-1 min-w-0 shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               {scopeLabel}
@@ -1057,39 +1177,41 @@ export function ForecastPlusMap() {
               {stats.feederCount} feeder{stats.feederCount === 1 ? "" : "s"} in scope
             </span>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 items-center">
-            <div className="flex flex-col border-r border-border/50 pr-4">
-              <span className="text-xs text-muted-foreground flex items-center gap-1 mb-1 whitespace-nowrap">
-                <Zap className="w-3 h-3 text-primary" /> Forecast Peak
-              </span>
-              <span className="font-bold text-lg">{peakVal} MW</span>
-            </div>
-            <div className="flex flex-col border-r border-border/50 pr-4">
-              <span className="text-xs text-muted-foreground flex items-center gap-1 mb-1 whitespace-nowrap">
-                <EnergyIcon className="w-3 h-3 text-amber-500" /> Forecast Energy
-              </span>
-              <span className="font-bold text-lg">{energyVal} MWh</span>
-            </div>
-            <div className="flex flex-col border-r border-border/50 pr-4">
-              <span className="text-xs text-muted-foreground flex items-center gap-1 mb-1 whitespace-nowrap">
-                <Sun className="w-3 h-3 text-amber-500" /> Solar Generation
-              </span>
-              <span className="font-bold text-lg">{solarVal} MWh</span>
-            </div>
-            <div className="flex flex-col border-r border-border/50 pr-4">
-              <span className="text-xs text-muted-foreground flex items-center gap-1 mb-1 whitespace-nowrap">
-                <Clock className="w-3 h-3 text-blue-500" /> Time of Peak
-              </span>
-              <span className="font-bold text-lg">{timeHour}:00</span>
-            </div>
-            <div className="flex flex-col">
-              <span className="text-xs text-muted-foreground flex items-center gap-1 mb-1 whitespace-nowrap">
-                <Percent className="w-3 h-3 text-emerald-500" /> vs. Average
-              </span>
-              <span className={`font-bold text-lg ${stats.vsAverage >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                {stats.vsAverage >= 0 ? "+" : ""}{stats.vsAverage.toFixed(1)}%
-              </span>
-            </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            <StatTile
+              icon={<Zap className="w-4 h-4 text-primary" />}
+              tint="bg-primary/10"
+              label="Forecast Peak"
+              value={peakVal}
+              unit="MW"
+            />
+            <StatTile
+              icon={<EnergyIcon className="w-4 h-4 text-amber-500" />}
+              tint="bg-amber-500/10"
+              label="Forecast Energy"
+              value={energyVal}
+              unit="MWh"
+            />
+            <StatTile
+              icon={<Sun className="w-4 h-4 text-amber-500" />}
+              tint="bg-amber-500/10"
+              label="Solar Generation"
+              value={solarVal}
+              unit="MWh"
+            />
+            <StatTile
+              icon={<Clock className="w-4 h-4 text-blue-500" />}
+              tint="bg-blue-500/10"
+              label="Time of Peak"
+              value={`${timeHour}:00`}
+            />
+            <StatTile
+              icon={<Percent className="w-4 h-4 text-emerald-500" />}
+              tint="bg-emerald-500/10"
+              label="vs. Average"
+              value={`${stats.vsAverage >= 0 ? "+" : ""}${stats.vsAverage.toFixed(1)}%`}
+              valueClass={stats.vsAverage >= 0 ? "text-emerald-600" : "text-rose-600"}
+            />
           </div>
         </div>
       </div>

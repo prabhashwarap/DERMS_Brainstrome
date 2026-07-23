@@ -30,6 +30,29 @@ export interface Feeder {
   profile: "residential" | "industrial";
   mix: string;
   seed: number;
+
+  /** Grid hierarchy node type. */
+  nodeType?:
+    | "branch"
+    | "csc"
+    | "substation"
+    | "feeder"
+    | "transformer"
+    | "meterEndpoint"
+    | "distributedSolar"
+    | "evse"
+    | "distributedBattery"
+    | "utilitySolar"
+    | "utilityBattery"
+    | "recloser";
+  typeName?: string;
+  branchName?: string;
+  cscName?: string;
+  substationName?: string;
+  feederName?: string;
+  transformerName?: string;
+  consumerName?: string;
+  derCombo?: string;
 }
 
 export const FEEDERS: Record<FeederId, Feeder> = {
@@ -37,7 +60,7 @@ export const FEEDERS: Record<FeederId, Feeder> = {
     id: "angulana",
     name: "Velona / Angulana",
     shortName: "Angulana",
-    substation: "Angulana GSS",
+    substation: "Angulana Substation",
     capacityMVA: 13,
     powerFactor: 0.95,
     solarPenetration: 0.09,
@@ -48,12 +71,19 @@ export const FEEDERS: Record<FeederId, Feeder> = {
     profile: "residential",
     mix: "Residential dominated",
     seed: 20260101,
+    nodeType: "feeder",
+    typeName: "Feeder Line",
+    branchName: "Moratuwa Branch",
+    cscName: "Moratuwa North CSC",
+    substationName: "Angulana Substation",
+    feederName: "Velona / Angulana Feeder",
+    derCombo: "Both Solar PV & EV Charging Active",
   },
   katunayake: {
     id: "katunayake",
     name: "Seeduwa / Katunayake",
     shortName: "Katunayake",
-    substation: "Katunayake GSS",
+    substation: "Katunayake Substation",
     capacityMVA: 22,
     powerFactor: 0.95,
     solarPenetration: 0.34,
@@ -64,6 +94,13 @@ export const FEEDERS: Record<FeederId, Feeder> = {
     profile: "industrial",
     mix: "Industrial + commercial",
     seed: 20260202,
+    nodeType: "feeder",
+    typeName: "Feeder Line",
+    branchName: "Negombo Branch",
+    cscName: "Seeduwa CSC",
+    substationName: "Katunayake Substation",
+    feederName: "Seeduwa / Katunayake Feeder",
+    derCombo: "Both Solar PV & EV Charging Active",
   },
 };
 
