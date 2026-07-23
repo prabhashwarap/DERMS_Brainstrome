@@ -19,7 +19,7 @@ import {
   ChevronRight,
   Layers
 } from "lucide-react";
-import { MapContainer, TileLayer, Marker, Popup, CircleMarker, Polyline, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, CircleMarker, Polyline, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import { renderToStaticMarkup } from "react-dom/server";
 import "leaflet/dist/leaflet.css";
@@ -41,13 +41,13 @@ const createCustomIcon = (iconNode: React.ReactElement, colorClass: string, size
 };
 
 const transformerIcon = createCustomIcon(<Zap className="w-3.5 h-3.5 text-blue-600" />, "border-blue-500 bg-blue-50", 20);
-const feederIcon = createCustomIcon(<Cable className="w-4 h-4 text-red-600" />, "border-red-500 bg-red-50", 24);
-const solarIcon = createCustomIcon(<Sun className="w-3.5 h-3.5 text-amber-600" />, "border-amber-500 bg-amber-50", 18);
-const evIcon = createCustomIcon(<BatteryCharging className="w-3.5 h-3.5 text-emerald-600" />, "border-emerald-500 bg-emerald-50", 18);
-const batteryIcon = createCustomIcon(<Battery className="w-3.5 h-3.5 text-purple-600" />, "border-purple-500 bg-purple-50", 18);
+const substationIcon = createCustomIcon(<Cable className="w-4 h-4 text-red-600" />, "border-red-500 bg-red-50", 24);
+const distributedSolarIcon = createCustomIcon(<Sun className="w-3.5 h-3.5 text-amber-600" />, "border-amber-500 bg-amber-50", 18);
+const evseIcon = createCustomIcon(<BatteryCharging className="w-3.5 h-3.5 text-emerald-600" />, "border-emerald-500 bg-emerald-50", 18);
+const distributedBatteryIcon = createCustomIcon(<Battery className="w-3.5 h-3.5 text-purple-600" />, "border-purple-500 bg-purple-50", 18);
 const branchHqIcon = createCustomIcon(<Building2 className="w-4 h-4 text-indigo-700" />, "border-indigo-600 bg-indigo-50", 28);
 const cscHqIcon = createCustomIcon(<Building className="w-3.5 h-3.5 text-cyan-700" />, "border-cyan-600 bg-cyan-50", 24);
-const feederIconMarker = createCustomIcon(<Waypoints className="w-3.5 h-3.5 text-rose-600" />, "border-rose-500 bg-rose-50", 20);
+const feederIcon = createCustomIcon(<Waypoints className="w-3.5 h-3.5 text-rose-600" />, "border-rose-500 bg-rose-50", 20);
 
 // LECO Grid Hierarchy: Branch -> CSC (Consumer Service Center) -> Feeder
 // Source: Lanka Electricity Company (LECO) branch/CSC network (leco.lk).
@@ -144,6 +144,23 @@ function feederCenter(cscCenter: [number, number], feederId: string): [number, n
   return [cscCenter[0] + dLat, cscCenter[1] + dLng];
 }
 
+function hashStr(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 131 + s.charCodeAt(i)) & 0x7fffffff;
+  return h;
+}
+
+// Deterministic per-feeder forecast so aggregate stats are a real roll-up of
+// whatever is in scope (a single feeder, a CSC's feeders, a branch, or all).
+function feederMetrics(feederId: string): { peak: number; energy: number; peakHour: number } {
+  const h = hashStr(feederId);
+  const peak = 3.2 + (h % 40) / 10; // ~3.2-7.1 MW per feeder
+  const loadFactor = 0.55 + ((h >> 3) % 26) / 100; // 0.55-0.80
+  const energy = peak * 24 * loadFactor;
+  const peakHour = 17 + ((h >> 5) % 4); // 17:00-20:00
+  return { peak, energy, peakHour };
+}
+
 interface LayerVisibility {
   branchHq: boolean;
   cscHq: boolean;
@@ -161,12 +178,34 @@ interface LayerVisibility {
   transmission: boolean;
 }
 
-// Component to dynamically re-center Leaflet map when selection changes
-function MapRecenter({ center, zoom }: { center: [number, number]; zoom: number }) {
+// Dynamically frame the map to the current scope: fit to all site centers when
+// several feeders are in view (e.g. all branches), otherwise center + zoom in.
+function MapView({
+  sites,
+  center,
+  zoom,
+}: {
+  sites: Array<[number, number]>;
+  center: [number, number];
+  zoom: number;
+}) {
   const map = useMap();
   useEffect(() => {
-    map.setView(center, zoom, { animate: true });
-  }, [center, zoom, map]);
+    if (sites.length > 1) {
+      map.fitBounds(L.latLngBounds(sites), { padding: [60, 60], animate: true });
+    } else {
+      map.setView(center, zoom, { animate: true });
+    }
+  }, [sites, center, zoom, map]);
+  return null;
+}
+
+// Lift the map's live zoom level into React state so the level of detail can
+// respond to the user scrolling/zooming, not just to filter changes.
+function ZoomWatcher({ onZoom }: { onZoom: (z: number) => void }) {
+  const map = useMapEvents({
+    zoomend: () => onZoom(map.getZoom()),
+  });
   return null;
 }
 
@@ -193,7 +232,11 @@ export function ForecastPlusMap() {
     transmission: false,
   });
 
-  const [legendOpen, setLegendOpen] = useState(true);
+  const [legendOpen, setLegendOpen] = useState(false);
+
+  // Live map zoom level, updated as the user scrolls/zooms (not just on filter
+  // changes). Seeded to the initial filter-derived zoom below.
+  const [liveZoom, setLiveZoom] = useState(11);
 
   const availableCscs = useMemo(() => {
     if (branch === "all") return [];
@@ -268,27 +311,77 @@ export function ForecastPlusMap() {
     return { branchHqs, cscHqs, feeders };
   }, [branch, csc]);
 
-  // Generate grid network data
-  const baseGrid = useMemo(() => {
-    const [cLat, cLng] = mapCenter;
-    const feederSubstation: [number, number] = [cLat, cLng];
-    
-    // Distribution transformers arranged in a ring around the feeder substation,
-    // so the MV feeder lines fan out across the surrounding street network.
-    const TX_COUNT = 8;
-    const transformers: Array<{ id: string; pos: [number, number]; name: string }> = [];
-    for (let i = 0; i < TX_COUNT; i++) {
-      const angle = (i / TX_COUNT) * Math.PI * 2 + seed * 0.15;
-      const ring = 0.0026 + ((i + seed) % 3) * 0.0011;
-      transformers.push({
-        id: `t${i + 1}`,
-        pos: [cLat + Math.sin(angle) * ring, cLng + Math.cos(angle) * ring],
-        name: `Tx Substation ${String(i + 1).padStart(2, "0")}`,
+  // One grid "site" per feeder in scope, positioned at that feeder's location.
+  // This is what makes the network span the whole selection: a single feeder at
+  // full detail, or every feeder across all branches at once.
+  const scopeSites = useMemo(() => {
+    const branches = branch === "all"
+      ? LECO_DATA.branches
+      : LECO_DATA.branches.filter(b => b.id === branch);
+    const sites: Array<{
+      feederId: string;
+      feederName: string;
+      cscName: string;
+      branchName: string;
+      center: [number, number];
+    }> = [];
+    branches.forEach(b => {
+      const cscs = csc === "all" ? b.cscs : b.cscs.filter(c => c.id === csc);
+      cscs.forEach(c => {
+        const feeders = feeder === "all" ? c.feeders : c.feeders.filter(f => f.id === feeder);
+        feeders.forEach(f => sites.push({
+          feederId: f.id,
+          feederName: f.name,
+          cscName: c.name,
+          branchName: b.name,
+          center: feederCenter(c.center, f.id),
+        }));
       });
-    }
+    });
+    return sites;
+  }, [branch, csc, feeder]);
 
-    return { feederSubstation, transformers };
-  }, [mapCenter, seed]);
+  // Stable array of site centers for MapView. Derived from the memoized
+  // scopeSites so its identity only changes when the filter scope changes —
+  // NOT on every render (e.g. a zoom-triggered re-render), which would
+  // otherwise make MapView re-fit the bounds and fight the user's scroll-zoom.
+  const scopeCenters = useMemo(() => scopeSites.map(s => s.center), [scopeSites]);
+
+  // Level of detail scales inversely with how many feeders are on screen: fewer
+  // transformers per site and no meter endpoints at wide scopes so the map stays
+  // legible. Distribution lines are always road-routed (see the throttled fetch
+  // below) so they stay aligned to streets at every zoom level.
+  const detail = useMemo(() => {
+    const n = scopeSites.length;
+    // Zoom drives how much detail to draw; the scope size caps it so a wide
+    // selection (e.g. all branches) can never explode into thousands of markers.
+    const zoomTx = liveZoom >= 15 ? 8 : liveZoom >= 13 ? 5 : 3;
+    const scopeTx = n <= 2 ? 8 : n <= 8 ? 5 : 3;
+    return {
+      txPerSite: Math.min(zoomTx, scopeTx),
+      showMeters: liveZoom >= 14 && n <= 2,
+    };
+  }, [scopeSites.length, liveZoom]);
+
+  // Generate grid network data for every site in scope.
+  const baseGrid = useMemo(() => {
+    return scopeSites.map((s, si) => {
+      const [cLat, cLng] = s.center;
+      // Distribution transformers arranged in a ring around the feeder
+      // substation, so the MV feeder lines fan out across the street network.
+      const transformers: Array<{ id: string; pos: [number, number]; name: string }> = [];
+      for (let i = 0; i < detail.txPerSite; i++) {
+        const angle = (i / detail.txPerSite) * Math.PI * 2 + (si + seed) * 0.15;
+        const ring = 0.0026 + ((i + seed) % 3) * 0.0011;
+        transformers.push({
+          id: `${s.feederId}-t${i + 1}`,
+          pos: [cLat + Math.sin(angle) * ring, cLng + Math.cos(angle) * ring],
+          name: `${s.feederName} Tx ${String(i + 1).padStart(2, "0")}`,
+        });
+      }
+      return { ...s, substation: s.center, transformers };
+    });
+  }, [scopeSites, detail.txPerSite, seed]);
 
   const [roadRoutes, setRoadRoutes] = useState<Record<string, Array<[number, number]>>>({});
 
@@ -301,50 +394,75 @@ export function ForecastPlusMap() {
     t,
   ];
 
-  // Fetch OSRM road paths
+  // Fetch OSRM road paths so distribution lines follow the street network at
+  // every scope. A wide view (all branches) can need ~140 routes, so we run them
+  // through a small concurrency-limited queue rather than firing all at once,
+  // which would get rate-limited by the public OSRM server.
   useEffect(() => {
-    let isMounted = true;
-    const { feederSubstation, transformers } = baseGrid;
+    let cancelled = false;
 
-    transformers.forEach(t => {
-      const key = routeKey(feederSubstation, t.pos);
-      if (roadRoutes[key]) return;
+    const jobs: Array<{ key: string; sub: [number, number]; pos: [number, number] }> = [];
+    baseGrid.forEach(site => {
+      site.transformers.forEach(t => {
+        const key = routeKey(site.substation, t.pos);
+        if (!roadRoutes[key]) jobs.push({ key, sub: site.substation, pos: t.pos });
+      });
+    });
+    if (jobs.length === 0) return;
 
-      const url = `https://router.project-osrm.org/route/v1/driving/${feederSubstation[1]},${feederSubstation[0]};${t.pos[1]},${t.pos[0]}?geometries=geojson&overview=full`;
-      
-      fetch(url)
+    let next = 0;
+    const CONCURRENCY = 6;
+
+    const runNext = (): Promise<void> => {
+      if (cancelled) return Promise.resolve();
+      const job = jobs[next++];
+      if (!job) return Promise.resolve();
+
+      const url = `https://router.project-osrm.org/route/v1/driving/${job.sub[1]},${job.sub[0]};${job.pos[1]},${job.pos[0]}?geometries=geojson&overview=full`;
+
+      return fetch(url)
         .then(res => res.json())
         .then(data => {
-          if (!isMounted) return;
+          if (cancelled) return;
           if (data.code === "Ok" && data.routes?.[0]?.geometry?.coordinates) {
             const coords: Array<[number, number]> = data.routes[0].geometry.coordinates.map(
               (c: [number, number]) => [c[1], c[0]]
             );
-            setRoadRoutes(prev => ({ ...prev, [key]: coords }));
+            setRoadRoutes(prev => ({ ...prev, [job.key]: coords }));
+          } else {
+            setRoadRoutes(prev => ({ ...prev, [job.key]: fallbackRoute(job.sub, job.pos) }));
           }
         })
         .catch(() => {
-          setRoadRoutes(prev => ({ ...prev, [key]: fallbackRoute(feederSubstation, t.pos) }));
-        });
-    });
+          if (!cancelled) setRoadRoutes(prev => ({ ...prev, [job.key]: fallbackRoute(job.sub, job.pos) }));
+        })
+        .then(runNext);
+    };
 
-    return () => { isMounted = false; };
+    Promise.all(
+      Array.from({ length: Math.min(CONCURRENCY, jobs.length) }, () => runNext())
+    );
+
+    return () => { cancelled = true; };
   }, [baseGrid]);
 
   // Sample meter endpoints evenly along each transformer's actual road path so
   // meters and their service drops hug the streets (matching the reference map).
   const consumers = useMemo(() => {
-    const { feederSubstation, transformers } = baseGrid;
     const out: Array<{
       id: string;
       pos: [number, number];
       roadPoint: [number, number];
       der?: "solar" | "ev" | "battery";
     }> = [];
+    if (!detail.showMeters) return out;
 
     let cId = 0;
-    transformers.forEach(t => {
-      const path = roadRoutes[routeKey(feederSubstation, t.pos)] || fallbackRoute(feederSubstation, t.pos);
+    const allTransformers = baseGrid.flatMap(site =>
+      site.transformers.map(t => ({ substation: site.substation, t }))
+    );
+    allTransformers.forEach(({ substation, t }) => {
+      const path = roadRoutes[routeKey(substation, t.pos)] || fallbackRoute(substation, t.pos);
       if (path.length < 2) return;
 
       // Cumulative length so we can space meters evenly along the route.
@@ -385,11 +503,41 @@ export function ForecastPlusMap() {
       }
     });
     return out;
-  }, [baseGrid, roadRoutes, seed]);
+  }, [baseGrid, roadRoutes, seed, detail.showMeters]);
 
-  const peakVal = (45.2 + seed * 1.5).toFixed(1);
-  const energyVal = (312.4 + seed * 10).toFixed(1);
-  const timeHour = 17 + (seed % 3);
+  // Aggregate forecast stats rolled up over exactly the feeders in scope.
+  const stats = useMemo(() => {
+    const metrics = scopeSites.map(s => feederMetrics(s.feederId));
+    const peak = metrics.reduce((s, m) => s + m.peak, 0);
+    const energy = metrics.reduce((s, m) => s + m.energy, 0);
+    // Time of system peak is driven by the largest feeder in scope.
+    const peakHour = metrics.length
+      ? metrics.reduce((a, b) => (b.peak > a.peak ? b : a)).peakHour
+      : 18;
+    // Deterministic deviation vs. seasonal average for this scope (-4% .. +8%).
+    const scopeKey = `${branch}|${csc}|${feeder}`;
+    const vsAverage = ((hashStr(scopeKey) % 120) / 10) - 4;
+    return {
+      peakVal: peak.toFixed(1),
+      energyVal: energy.toFixed(1),
+      timeHour: peakHour,
+      vsAverage,
+      feederCount: scopeSites.length,
+    };
+  }, [scopeSites, branch, csc, feeder]);
+
+  const { peakVal, energyVal, timeHour } = stats;
+
+  // Human-readable description of the active filter scope.
+  const scopeLabel = useMemo(() => {
+    const b = LECO_DATA.branches.find(x => x.id === branch);
+    if (!b) return "All Branches";
+    const c = b.cscs.find(x => x.id === csc);
+    if (!c) return `${b.name} Branch`;
+    const f = c.feeders.find(x => x.id === feeder);
+    if (!f) return `${c.name} CSC`;
+    return `${f.name} Feeder`;
+  }, [branch, csc, feeder]);
 
   // Grouped top-down: organization -> network (HV to LV) -> DER & storage -> protection.
   const legendGroups: Array<{
@@ -407,10 +555,10 @@ export function ForecastPlusMap() {
     {
       title: "Network",
       items: [
-        { key: "transmission", label: "Transmission", icon: Cable, color: "text-teal-600" },
+        { key: "transmission", label: "Transmission Line", icon: Cable, color: "text-teal-600" },
         { key: "substation", label: "Substation", icon: Cable, color: "text-blue-600" },
-        { key: "distribution", label: "Distribution", icon: Activity, color: "text-sky-500" },
-        { key: "transformer", label: "Transformer", icon: Zap, color: "text-blue-500" },
+        { key: "distribution", label: "Distribution Line", icon: Activity, color: "text-sky-500" },
+        { key: "transformer", label: "Distribution Transformer", icon: Zap, color: "text-blue-500" },
         { key: "meterEndpoint", label: "Meter Endpoint", icon: Grid, color: "text-slate-800" },
       ],
     },
@@ -484,6 +632,14 @@ export function ForecastPlusMap() {
 
         {/* Summary Panel */}
         <div className="bg-card p-4 rounded-lg border border-border flex-1 lg:max-w-xl shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {scopeLabel}
+            </span>
+            <span className="text-[11px] text-muted-foreground">
+              {stats.feederCount} feeder{stats.feederCount === 1 ? "" : "s"} in scope
+            </span>
+          </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 items-center">
             <div className="flex flex-col border-r border-border/50 pr-4">
               <span className="text-xs text-muted-foreground flex items-center gap-1 mb-1 whitespace-nowrap">
@@ -507,7 +663,9 @@ export function ForecastPlusMap() {
               <span className="text-xs text-muted-foreground flex items-center gap-1 mb-1 whitespace-nowrap">
                 <Percent className="w-3 h-3 text-emerald-500" /> vs. Average
               </span>
-              <span className="font-bold text-lg text-emerald-600">+{(seed * 0.4).toFixed(1)}%</span>
+              <span className={`font-bold text-lg ${stats.vsAverage >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                {stats.vsAverage >= 0 ? "+" : ""}{stats.vsAverage.toFixed(1)}%
+              </span>
             </div>
           </div>
         </div>
@@ -516,7 +674,8 @@ export function ForecastPlusMap() {
       {/* Map Area with Leaflet & Floating Layer Legend */}
       <div className="flex-1 rounded-lg overflow-hidden border border-border relative shadow-sm">
         <MapContainer center={mapCenter} zoom={mapZoom} style={{ height: "100%", width: "100%", zIndex: 0 }}>
-          <MapRecenter center={mapCenter} zoom={mapZoom} />
+          <MapView sites={scopeCenters} center={mapCenter} zoom={mapZoom} />
+          <ZoomWatcher onZoom={setLiveZoom} />
 
           {/* Carto Positron Crisp Light Tile Layer (100% Free & Reliable) */}
           <TileLayer
@@ -539,7 +698,7 @@ export function ForecastPlusMap() {
           {layers.cscHq && orgMarkers.cscHqs.map(c => (
             <Marker key={`csc-${c.id}`} position={c.center} icon={cscHqIcon}>
               <Popup>
-                <div className="text-xs font-semibold">{c.name} CSC</div>
+                <div className="text-xs font-semibold">{c.name} CSC HQ</div>
                 <div className="text-[11px] text-muted-foreground">Consumer Service Center &middot; {c.feeders.length} feeders</div>
               </Popup>
             </Marker>
@@ -547,7 +706,7 @@ export function ForecastPlusMap() {
 
           {/* LECO Org Hierarchy: Feeders */}
           {layers.feeder && orgMarkers.feeders.map(f => (
-            <Marker key={`feeder-${f.id}`} position={f.center} icon={feederIconMarker}>
+            <Marker key={`feeder-${f.id}`} position={f.center} icon={feederIcon}>
               <Popup>
                 <div className="text-xs font-semibold">{f.name} Feeder</div>
                 <div className="text-[11px] text-muted-foreground">{f.csc} CSC</div>
@@ -556,17 +715,19 @@ export function ForecastPlusMap() {
           ))}
 
           {/* Distribution Lines following OSM Road Network */}
-          {layers.distribution && baseGrid.transformers.map(t => {
-            const key = routeKey(baseGrid.feederSubstation, t.pos);
-            const path = roadRoutes[key] || fallbackRoute(baseGrid.feederSubstation, t.pos);
-            return (
-              <Polyline 
-                key={key} 
-                positions={path} 
-                pathOptions={{ color: '#0284c7', weight: 3.5, opacity: 0.9 }} 
-              />
-            );
-          })}
+          {layers.distribution && baseGrid.flatMap(site =>
+            site.transformers.map(t => {
+              const key = routeKey(site.substation, t.pos);
+              const path = roadRoutes[key] || fallbackRoute(site.substation, t.pos);
+              return (
+                <Polyline
+                  key={key}
+                  positions={path}
+                  pathOptions={{ color: '#0284c7', weight: 3.5, opacity: 0.9 }}
+                />
+              );
+            })
+          )}
 
           {/* Service Drop Lines */}
           {layers.distribution && consumers.map(c => (
@@ -577,25 +738,28 @@ export function ForecastPlusMap() {
             />
           ))}
 
-          {/* Substation Marker */}
-          {layers.substation && (
-            <Marker position={baseGrid.feederSubstation} icon={feederIcon}>
+          {/* Substation Markers (one per feeder in scope) */}
+          {layers.substation && baseGrid.map(site => (
+            <Marker key={`sub-${site.feederId}`} position={site.substation} icon={substationIcon}>
               <Popup>
-                <div className="text-xs font-semibold">LECO Primary Substation</div>
-                <div className="text-[11px] text-muted-foreground font-mono">ID: SUB-COLOMBO-01</div>
-              </Popup>
-            </Marker>
-          )}
-
-          {/* Transformers */}
-          {layers.transformer && baseGrid.transformers.map(t => (
-            <Marker key={t.id} position={t.pos} icon={transformerIcon}>
-              <Popup>
-                <div className="text-xs font-semibold">{t.name}</div>
-                <div className="text-[11px] text-muted-foreground">Distribution Transformer 11kV/400V</div>
+                <div className="text-xs font-semibold">{site.feederName} Substation</div>
+                <div className="text-[11px] text-muted-foreground">{site.cscName} CSC &middot; {site.branchName} Branch</div>
+                <div className="text-[11px] text-muted-foreground font-mono">ID: SUB-{site.feederId.toUpperCase()}</div>
               </Popup>
             </Marker>
           ))}
+
+          {/* Transformers */}
+          {layers.transformer && baseGrid.flatMap(site =>
+            site.transformers.map(t => (
+              <Marker key={t.id} position={t.pos} icon={transformerIcon}>
+                <Popup>
+                  <div className="text-xs font-semibold">{t.name}</div>
+                  <div className="text-[11px] text-muted-foreground">Distribution Transformer 11kV/400V</div>
+                </Popup>
+              </Marker>
+            ))
+          )}
 
           {/* Meter Endpoints & DERs */}
           {consumers.map(c => (
@@ -607,30 +771,39 @@ export function ForecastPlusMap() {
                   pathOptions={{ color: '#ffffff', fillColor: '#0f172a', fillOpacity: 1, weight: 1.5 }}
                 >
                   <Popup>
-                    <div className="text-xs font-semibold font-mono">AMI Meter Endpoint</div>
-                    <div className="text-[10px] text-muted-foreground">ID: {c.id}</div>
+                    <div className="text-xs font-semibold">Meter Endpoint</div>
+                    <div className="text-[11px] text-muted-foreground">AMI Smart Meter &middot; <span className="font-mono">ID: {c.id}</span></div>
                   </Popup>
                 </CircleMarker>
               )}
 
               {/* Distributed Solar */}
               {layers.distributedSolar && c.der === "solar" && (
-                <Marker position={[c.pos[0] + 0.00008, c.pos[1] + 0.00008]} icon={solarIcon}>
-                  <Popup>Distributed Rooftop Solar PV</Popup>
+                <Marker position={[c.pos[0] + 0.00008, c.pos[1] + 0.00008]} icon={distributedSolarIcon}>
+                  <Popup>
+                    <div className="text-xs font-semibold">Distributed Solar</div>
+                    <div className="text-[11px] text-muted-foreground">Rooftop Solar PV</div>
+                  </Popup>
                 </Marker>
               )}
 
               {/* EVSE */}
               {layers.evse && c.der === "ev" && (
-                <Marker position={[c.pos[0] + 0.00008, c.pos[1] + 0.00008]} icon={evIcon}>
-                  <Popup>Electric Vehicle Supply Equipment (EVSE)</Popup>
+                <Marker position={[c.pos[0] + 0.00008, c.pos[1] + 0.00008]} icon={evseIcon}>
+                  <Popup>
+                    <div className="text-xs font-semibold">EVSE</div>
+                    <div className="text-[11px] text-muted-foreground">EV Supply Equipment</div>
+                  </Popup>
                 </Marker>
               )}
 
               {/* Distributed Battery */}
               {layers.distributedBattery && c.der === "battery" && (
-                <Marker position={[c.pos[0] + 0.00008, c.pos[1] + 0.00008]} icon={batteryIcon}>
-                  <Popup>Distributed Battery Storage (BESS)</Popup>
+                <Marker position={[c.pos[0] + 0.00008, c.pos[1] + 0.00008]} icon={distributedBatteryIcon}>
+                  <Popup>
+                    <div className="text-xs font-semibold">Distributed Battery</div>
+                    <div className="text-[11px] text-muted-foreground">Battery Storage (BESS)</div>
+                  </Popup>
                 </Marker>
               )}
             </React.Fragment>
