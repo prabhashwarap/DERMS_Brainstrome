@@ -196,11 +196,14 @@ const LECO_DATA: { branches: Branch[] } = {
         {
           id: "moratuwa_north",
           name: "Moratuwa North",
-          center: [6.8042, 79.8785],
-          substationName: "Angulana Substation",
+          // Real Angulana / Rawatawatta geography. Unlike the rest of the
+          // network this CSC is hand-curated (see MORATUWA_NORTH_SUBSTATION /
+          // MORATUWA_NORTH_TX below), not procedurally generated.
+          center: [6.7998, 79.8788],
+          substationName: "Angulana Grid Substation",
           feeders: [
-            { id: "moratuwa_north_f1", name: "Rawatawatta", center: [6.7865, 79.8850] },
-            { id: "angulana", name: "Velona / Angulana", center: [6.8020, 79.8770] },
+            { id: "moratuwa_north_f1", name: "Rawatawatta", center: [6.7892, 79.8840] },
+            { id: "angulana", name: "Velona / Angulana", center: [6.8038, 79.8770] },
           ],
         },
         {
@@ -350,6 +353,55 @@ const LECO_DATA: { branches: Branch[] } = {
 };
 
 const DEFAULT_CENTER: [number, number] = [6.9271, 79.8612];
+
+// ── Moratuwa North CSC: hand-curated real-world topology ─────────────────────
+// Every other CSC in LECO_DATA is drawn procedurally (transformers ringed around
+// a feeder centroid, a substation implied at each feeder pin). Moratuwa North is
+// instead placed against the real Angulana / Rawatawatta street grid: ONE shared
+// primary substation feeding two 11kV feeders, each with distribution
+// transformers at real road-side locations. The distribution lines and service
+// drops are snapped to the OSM road network by the same OSRM routing effect used
+// everywhere else, so the whole CSC reads as a properly wired network.
+const MORATUWA_NORTH_SUBSTATION: [number, number] = [6.8012, 79.8772];
+const MORATUWA_NORTH_TX: Record<string, Array<[number, number]>> = {
+  // Velona / Angulana feeder — the northern half of the CSC: Angulana station,
+  // Uyana and Idama, spread across the street grid east of the coast line.
+  angulana: [
+    [6.8055, 79.8782],
+    [6.8040, 79.8770],
+    [6.8065, 79.8798],
+    [6.8028, 79.8768],
+    [6.8048, 79.8810],
+    [6.8010, 79.8778],
+    [6.8082, 79.8790],
+    [6.8072, 79.8772],
+    [6.8020, 79.8800],
+    [6.7998, 79.8788],
+    [6.8090, 79.8778],
+    [6.8035, 79.8822],
+    [6.8100, 79.8800],
+    [6.8060, 79.8760],
+  ],
+  // Rawatawatta feeder — the southern half of the CSC: Rawatawatta and Moratuwa
+  // North, running south along Galle Road toward Moratuwa town.
+  moratuwa_north_f1: [
+    [6.7910, 79.8832],
+    [6.7892, 79.8848],
+    [6.7925, 79.8820],
+    [6.7875, 79.8838],
+    [6.7902, 79.8862],
+    [6.7865, 79.8852],
+    [6.7938, 79.8835],
+    [6.7885, 79.8872],
+    [6.7850, 79.8842],
+    [6.7920, 79.8808],
+    [6.7868, 79.8818],
+    [6.7835, 79.8858],
+    [6.7948, 79.8812],
+    [6.7828, 79.8832],
+  ],
+};
+const isCuratedFeeder = (id: string) => id in MORATUWA_NORTH_TX;
 
 // Returns the accurate geographic center for a feeder, or calculates a deterministic offset near its CSC.
 function feederCenter(cscOrCenter: Csc | [number, number], feederOrId: Feeder | string): [number, number] {
@@ -575,7 +627,11 @@ export function ForecastPlusMap() {
           status: "Normal",
         });
 
-        // Primary Substation
+        // Primary Substation — curated CSCs pin it at their real shared
+        // substation location instead of the CSC centroid.
+        const subCenter: [number, number] = c.feeders.some(f => isCuratedFeeder(f.id))
+          ? MORATUWA_NORTH_SUBSTATION
+          : c.center;
         nodes.push({
           id: `sub-${c.id}`,
           name: c.substationName,
@@ -586,7 +642,7 @@ export function ForecastPlusMap() {
           cscId: c.id,
           cscName: `${c.name} CSC`,
           substationName: c.substationName,
-          center: c.center,
+          center: subCenter,
           status: "Normal",
         });
 
@@ -609,16 +665,20 @@ export function ForecastPlusMap() {
             status: "Normal",
           });
 
-          // Distribution Transformers & DERs
+          // Distribution Transformers & DERs. Curated feeders use their real
+          // road-side coordinates; procedural feeders ring around the centroid.
           const seedVal = hashStr(f.id);
-          const txCount = 5;
+          const curatedTx = MORATUWA_NORTH_TX[f.id];
+          const txCount = curatedTx ? curatedTx.length : 5;
           for (let i = 0; i < txCount; i++) {
             const angle = (i / txCount) * Math.PI * 2 + (seedVal % 10) * 0.15;
             const ring = 0.0026 + ((i + seedVal) % 3) * 0.0011;
-            const tPos: [number, number] = [
-              fCenter[0] + Math.sin(angle) * ring,
-              fCenter[1] + Math.cos(angle) * ring,
-            ];
+            const tPos: [number, number] = curatedTx
+              ? curatedTx[i]
+              : [
+                  fCenter[0] + Math.sin(angle) * ring,
+                  fCenter[1] + Math.cos(angle) * ring,
+                ];
             const tId = `${f.id}-t${i + 1}`;
             const tName = `${f.name} Tx ${String(i + 1).padStart(2, "0")}`;
 
@@ -944,19 +1004,26 @@ export function ForecastPlusMap() {
       cscName: string;
       branchName: string;
       center: [number, number];
+      substationCenter: [number, number];
     }> = [];
     branches.forEach(b => {
       const cscs = csc === "all" ? b.cscs : b.cscs.filter(c => c.id === csc);
       cscs.forEach(c => {
         const feeders = feeder === "all" ? c.feeders : c.feeders.filter(f => f.id === feeder);
-        feeders.forEach(f => sites.push({
-          feederId: f.id,
-          feederName: f.name,
-          substationName: c.substationName,
-          cscName: c.name,
-          branchName: b.name,
-          center: feederCenter(c, f),
-        }));
+        feeders.forEach(f => {
+          const center = feederCenter(c, f);
+          sites.push({
+            feederId: f.id,
+            feederName: f.name,
+            substationName: c.substationName,
+            cscName: c.name,
+            branchName: b.name,
+            center,
+            // Curated feeders share one real primary substation; procedural
+            // feeders keep the legacy behaviour of a substation at the feeder pin.
+            substationCenter: isCuratedFeeder(f.id) ? MORATUWA_NORTH_SUBSTATION : center,
+          });
+        });
       });
     });
     return sites;
@@ -990,23 +1057,93 @@ export function ForecastPlusMap() {
         feederId: string;
         feederName: string;
       }> = [];
-      for (let i = 0; i < detail.txPerSite; i++) {
-        const angle = (i / detail.txPerSite) * Math.PI * 2 + (si + seed) * 0.15;
-        const ring = 0.0026 + ((i + seed) % 3) * 0.0011;
-        transformers.push({
-          id: `${s.feederId}-t${i + 1}`,
-          pos: [cLat + Math.sin(angle) * ring, cLng + Math.cos(angle) * ring],
-          name: `${s.feederName} Tx ${String(i + 1).padStart(2, "0")}`,
-          substationName: s.substationName,
-          cscName: s.cscName,
-          branchName: s.branchName,
-          feederId: s.feederId,
-          feederName: s.feederName,
+      const curated = MORATUWA_NORTH_TX[s.feederId];
+      if (curated) {
+        // Curated feeder: transformers at real road-side coordinates.
+        curated.forEach((pos, i) => {
+          transformers.push({
+            id: `${s.feederId}-t${i + 1}`,
+            pos,
+            name: `${s.feederName} Tx ${String(i + 1).padStart(2, "0")}`,
+            substationName: s.substationName,
+            cscName: s.cscName,
+            branchName: s.branchName,
+            feederId: s.feederId,
+            feederName: s.feederName,
+          });
         });
+      } else {
+        for (let i = 0; i < detail.txPerSite; i++) {
+          const angle = (i / detail.txPerSite) * Math.PI * 2 + (si + seed) * 0.15;
+          const ring = 0.0026 + ((i + seed) % 3) * 0.0011;
+          transformers.push({
+            id: `${s.feederId}-t${i + 1}`,
+            pos: [cLat + Math.sin(angle) * ring, cLng + Math.cos(angle) * ring],
+            name: `${s.feederName} Tx ${String(i + 1).padStart(2, "0")}`,
+            substationName: s.substationName,
+            cscName: s.cscName,
+            branchName: s.branchName,
+            feederId: s.feederId,
+            feederName: s.feederName,
+          });
+        }
       }
-      return { ...s, substation: s.center, transformers };
+      // Distribution lines and meters route from this feeder's substation. For
+      // curated feeders that is the one shared Angulana primary substation.
+      return { ...s, substation: s.substationCenter, transformers };
     });
   }, [scopeSites, detail.txPerSite, seed]);
+
+  // One substation pin per physical substation. Curated CSCs share a single
+  // substation across their feeders, so dedupe by rounded coordinate to avoid
+  // stacking identical pins on the same spot.
+  const substationSites = useMemo(() => {
+    const seen = new Set<string>();
+    return baseGrid.filter(site => {
+      const k = `${site.substation[0].toFixed(5)},${site.substation[1].toFixed(5)}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  }, [baseGrid]);
+
+  // Map each feeder to the substation that supplies it, so hovering a shared
+  // substation can light up every feeder hanging off it (curated CSCs) while a
+  // per-feeder substation lights only its own feeder (procedural CSCs).
+  const subFeeders = useMemo(() => {
+    const byFeeder = new Map<string, string>();
+    const byKey = new Map<string, Set<string>>();
+    scopeSites.forEach(s => {
+      const key = `${s.substationCenter[0].toFixed(5)},${s.substationCenter[1].toFixed(5)}`;
+      byFeeder.set(s.feederId, key);
+      if (!byKey.has(key)) byKey.set(key, new Set());
+      byKey.get(key)!.add(s.feederId);
+    });
+    return { byFeeder, byKey };
+  }, [scopeSites]);
+
+  // Resolve the hovered marker id into a hierarchy scope. Node ids encode the
+  // hierarchy: `branch-`/csc ids, `feeder-<id>`, `sub-<feederId>`,
+  // `<feederId>-t<n>` transformers, and leaf meters/DERs. A hovered parent keeps
+  // itself and all its descendants (and their distribution lines) fully lit.
+  const hoverInfo = useMemo(() => {
+    if (!hoveredId) return null;
+    const tx = hoveredId.match(/^(.+)-t\d+$/);
+    if (tx) return { kind: "transformer" as const, transformerId: hoveredId, feederId: tx[1] };
+    if (hoveredId.startsWith("feeder-"))
+      return { kind: "feeder" as const, feederId: hoveredId.slice("feeder-".length) };
+    if (hoveredId.startsWith("sub-")) {
+      const feederId = hoveredId.slice("sub-".length);
+      const key = subFeeders.byFeeder.get(feederId);
+      const feeders = (key && subFeeders.byKey.get(key)) || new Set([feederId]);
+      return { kind: "substation" as const, feeders };
+    }
+    const csc = LECO_DATA.branches.flatMap(b => b.cscs).find(c => c.id === hoveredId);
+    if (csc) return { kind: "csc" as const, cscName: csc.name };
+    const branch = LECO_DATA.branches.find(b => b.id === hoveredId);
+    if (branch) return { kind: "branch" as const, branchName: branch.name };
+    return { kind: "leaf" as const };
+  }, [hoveredId, subFeeders]);
 
   const [roadRoutes, setRoadRoutes] = useState<Record<string, Array<[number, number]>>>({});
 
@@ -1233,9 +1370,31 @@ export function ForecastPlusMap() {
     () => {
       // Full opacity for the hovered node (or when nothing is hovered); every
       // other node dims to 50%. `hoverProps` wires a marker into this state.
-      const opacityFor = (id: string) => (hoveredId && hoveredId !== id ? 0.5 : 1);
-      const lineOpacity = (base: number, id?: string) =>
-        hoveredId && hoveredId !== id ? base * 0.5 : base;
+      type HoverMeta = {
+        id: string;
+        feederId?: string;
+        transformerId?: string;
+        cscName?: string;
+        branchName?: string;
+      };
+      // A node/line stays fully lit when nothing is hovered, when it *is* the
+      // hovered node, or when it is a descendant of the hovered node — i.e.
+      // hovering a parent keeps the parent and all its children (and the
+      // distribution lines between them) visible while everything else dims.
+      const showFull = (m: HoverMeta): boolean => {
+        if (!hoverInfo) return true;
+        if (m.id === hoveredId) return true;
+        switch (hoverInfo.kind) {
+          case "branch": return m.branchName === hoverInfo.branchName;
+          case "csc": return m.cscName === hoverInfo.cscName;
+          case "substation": return !!m.feederId && hoverInfo.feeders.has(m.feederId);
+          case "feeder": return m.feederId === hoverInfo.feederId;
+          case "transformer": return m.transformerId === hoverInfo.transformerId;
+          default: return false; // leaf: only the hovered node itself
+        }
+      };
+      const opacityFor = (m: HoverMeta) => (showFull(m) ? 1 : 0.5);
+      const lineOpacity = (base: number, m: HoverMeta) => (showFull(m) ? base : base * 0.5);
       const hoverProps = (id: string) => ({
         mouseover: () => setHoveredId(id),
         mouseout: () => setHoveredId((cur) => (cur === id ? null : cur)),
@@ -1259,7 +1418,7 @@ export function ForecastPlusMap() {
               key={`branch-${b.id}`}
               position={b.center}
               icon={branchHqIcon}
-              opacity={opacityFor(b.id)}
+              opacity={opacityFor({ id: b.id, branchName: b.name })}
               eventHandlers={{ click: () => setSelectedNode(nodeData), ...hoverProps(b.id) }}
             >
               <Popup>
@@ -1295,7 +1454,7 @@ export function ForecastPlusMap() {
               key={`csc-${c.id}`}
               position={c.center}
               icon={cscHqIcon}
-              opacity={opacityFor(c.id)}
+              opacity={opacityFor({ id: c.id, cscName: c.name })}
               eventHandlers={{ click: () => setSelectedNode(nodeData), ...hoverProps(c.id) }}
             >
               <Popup>
@@ -1338,7 +1497,7 @@ export function ForecastPlusMap() {
               key={feederNodeId}
               position={pos}
               icon={feederIcon}
-              opacity={opacityFor(feederNodeId)}
+              opacity={opacityFor({ id: feederNodeId, feederId: s.feederId, cscName: s.cscName, branchName: s.branchName })}
               eventHandlers={{ click: () => setSelectedNode(nodeData), ...hoverProps(feederNodeId) }}
             >
               <Popup>
@@ -1392,7 +1551,7 @@ export function ForecastPlusMap() {
               <Polyline
                 key={key}
                 positions={path}
-                pathOptions={{ color: '#0284c7', weight: 3.5, opacity: lineOpacity(0.9, `feeder-${site.feederId}`) }}
+                pathOptions={{ color: '#0284c7', weight: 3.5, opacity: lineOpacity(0.9, { id: `feeder-${site.feederId}`, feederId: site.feederId, transformerId: t.id, cscName: site.cscName, branchName: site.branchName }) }}
                 eventHandlers={{
                   click: () => setSelectedNode({
                     id: `feeder-${site.feederId}`,
@@ -1411,17 +1570,8 @@ export function ForecastPlusMap() {
           })
         )}
 
-        {/* Service Drop Lines */}
-        {layers.distribution && consumers.map(c => (
-          <Polyline
-            key={`drop-${c.id}`}
-            positions={[c.pos, c.roadPoint]}
-            pathOptions={{ color: '#38bdf8', weight: 1.5, opacity: lineOpacity(0.7, c.id), dashArray: '3 3' }}
-          />
-        ))}
-
-        {/* Substation Markers (one per feeder in scope) */}
-        {layers.substation && baseGrid.map(site => {
+        {/* Substation Markers (one per physical substation in scope) */}
+        {layers.substation && substationSites.map(site => {
           const nodeData: MapNodeDetails = {
             id: `sub-${site.feederId}`,
             name: site.substationName,
@@ -1439,7 +1589,7 @@ export function ForecastPlusMap() {
               key={`sub-${site.feederId}`}
               position={site.substation}
               icon={substationIcon}
-              opacity={opacityFor(`sub-${site.feederId}`)}
+              opacity={opacityFor({ id: `sub-${site.feederId}`, feederId: site.feederId, cscName: site.cscName, branchName: site.branchName })}
               eventHandlers={{ click: () => setSelectedNode(nodeData), ...hoverProps(`sub-${site.feederId}`) }}
             >
               <Popup>
@@ -1481,7 +1631,7 @@ export function ForecastPlusMap() {
                 key={t.id}
                 position={t.pos}
                 icon={transformerIcon}
-                opacity={opacityFor(t.id)}
+                opacity={opacityFor({ id: t.id, feederId: site.feederId, transformerId: t.id, cscName: site.cscName, branchName: site.branchName })}
                 eventHandlers={{ click: () => setSelectedNode(nodeData), ...hoverProps(t.id) }}
               >
                 <Popup>
@@ -1578,7 +1728,7 @@ export function ForecastPlusMap() {
                 <CircleMarker
                   center={c.pos}
                   radius={4.5}
-                  pathOptions={{ color: theme === "dark" ? '#0b0e1a' : '#ffffff', fillColor: theme === "dark" ? '#e2e8f0' : '#0f172a', fillOpacity: opacityFor(c.id), opacity: opacityFor(c.id), weight: 1.5 }}
+                  pathOptions={{ color: theme === "dark" ? '#0b0e1a' : '#ffffff', fillColor: theme === "dark" ? '#e2e8f0' : '#0f172a', fillOpacity: opacityFor({ id: c.id, feederId: c.feederId, transformerId: c.transformerId, cscName: c.cscName, branchName: c.branchName }), opacity: opacityFor({ id: c.id, feederId: c.feederId, transformerId: c.transformerId, cscName: c.cscName, branchName: c.branchName }), weight: 1.5 }}
                   eventHandlers={{ click: () => setSelectedNode(meterNode), ...hoverProps(c.id) }}
                 >
                   <Popup>
@@ -1600,7 +1750,7 @@ export function ForecastPlusMap() {
                 <Marker
                   position={[c.pos[0] + 0.00008, c.pos[1] + 0.00008]}
                   icon={distributedSolarIcon}
-                  opacity={opacityFor(solarNode.id)}
+                  opacity={opacityFor({ id: solarNode.id, feederId: c.feederId, transformerId: c.transformerId, cscName: c.cscName, branchName: c.branchName })}
                   eventHandlers={{ click: () => setSelectedNode(solarNode), ...hoverProps(solarNode.id) }}
                 >
                   <Popup>
@@ -1622,7 +1772,7 @@ export function ForecastPlusMap() {
                 <Marker
                   position={[c.pos[0] + 0.00008, c.pos[1] + 0.00008]}
                   icon={evseIcon}
-                  opacity={opacityFor(evNode.id)}
+                  opacity={opacityFor({ id: evNode.id, feederId: c.feederId, transformerId: c.transformerId, cscName: c.cscName, branchName: c.branchName })}
                   eventHandlers={{ click: () => setSelectedNode(evNode), ...hoverProps(evNode.id) }}
                 >
                   <Popup>
@@ -1644,7 +1794,7 @@ export function ForecastPlusMap() {
                 <Marker
                   position={[c.pos[0] + 0.00008, c.pos[1] + 0.00008]}
                   icon={distributedBatteryIcon}
-                  opacity={opacityFor(batteryNode.id)}
+                  opacity={opacityFor({ id: batteryNode.id, feederId: c.feederId, transformerId: c.transformerId, cscName: c.cscName, branchName: c.branchName })}
                   eventHandlers={{ click: () => setSelectedNode(batteryNode), ...hoverProps(batteryNode.id) }}
                 >
                   <Popup>
@@ -1666,7 +1816,7 @@ export function ForecastPlusMap() {
       </>
       );
     },
-    [layers, orgMarkers, scopeSites, baseGrid, roadRoutes, consumers, hoveredId, theme]
+    [layers, orgMarkers, scopeSites, baseGrid, substationSites, roadRoutes, consumers, hoveredId, hoverInfo, theme]
   );
 
   return (
