@@ -1,7 +1,7 @@
 # LECO Day-Ahead Load Forecasting — v1 demonstration
 
 Front-end pilot for the Lanka Electricity Company: a day-ahead net-load forecast
-for two distribution feeders, on realistic synthetic data, built to the Oversight
+for two distribution feeders, on realistic synthetic data, built to the Oversight+
 design language.
 
 ```bash
@@ -19,7 +19,7 @@ them.
 
 ## Information architecture
 
-The pilot sits inside the Oversight shell — persistent left rail, thin top bar,
+The pilot sits inside the Oversight+ shell — persistent left rail, thin top bar,
 content area. Only **Forecasting** is built; the other rail entries are rendered
 inert rather than omitted, so the section occupies its real position in the
 product and the navigation needs no redesign when it merges in.
@@ -79,7 +79,7 @@ floor, CVD separation, normal-vision separation, contrast):
 | Confidence band | actual hue @ 17% | actual hue @ 16% |
 | Similar-day baseline | `#8257F5` | `#6D28D9` |
 
-Light is the default, matching the Oversight platform shell. Dark is the same
+Light is the default, matching the Oversight+ platform shell. Dark is the same
 tokens restepped for a navy surface — one click in the top bar — because control
 rooms run 24/7 and a luminous screen at 03:00 is a fatigue problem.
 

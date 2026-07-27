@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 /**
  * Platform chrome.
  *
- * The Oversight shell: persistent left rail, thin top bar, content area. Only
+ * The Oversight+ shell: persistent left rail, thin top bar, content area. Only
  * Forecasting is built — the rest of the rail is rendered inert rather than
  * omitted, so the pilot sits in its real position in the product and the
  * navigation doesn't have to be redesigned when it merges in.
@@ -137,7 +137,7 @@ function Sidebar({ open, onClose, activeNav, onNavChange }: { open: boolean; onC
                 </span>
               </TooltipTrigger>
               <TooltipContent side="right">
-                Part of the wider Oversight platform - outside the forecasting pilot.
+                Part of the wider Oversight+ platform - outside the forecasting pilot.
               </TooltipContent>
             </Tooltip>
           );
