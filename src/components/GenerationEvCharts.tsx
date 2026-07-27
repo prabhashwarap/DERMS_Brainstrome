@@ -193,7 +193,7 @@ function StandaloneChart({
       title={title}
       subtitle={subtitle}
       capacityLabel={capacityLabel}
-      heightClassName="h-[300px] sm:h-[360px]"
+      heightClassName="h-[240px] sm:h-[280px]"
       collapsible
       defaultCollapsed={defaultCollapsed}
       variant={variant}
