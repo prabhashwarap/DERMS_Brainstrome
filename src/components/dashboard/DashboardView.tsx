@@ -44,6 +44,7 @@ import { FEEDER_LIST, capacityMW, type FeederId } from "@/pipeline/feeders";
 import type { Bundle } from "@/pipeline/forecast";
 import type { SystemTick } from "@/pipeline/system/types";
 import { useStackSeries, useSystemTick } from "@/lib/useBalance";
+import { formatEnergy } from "@/lib/utils";
 
 export function DashboardView({
   bundle,
@@ -152,14 +153,8 @@ function FeederOverview({
   const loadingPct = capacity > 0 ? (100 * liveLoadMW) / capacity : 0;
   const solarOffsetPct = liveLoadMW > 0 ? (100 * liveSolarMW) / liveLoadMW : 0;
 
-  // Feeder bus voltage (11.0 kV nominal system) — voltage drops under heavy load and rises under high solar
-  const jitter3 = feederJitter(tick.ts, feeder.seed + 12);
-  const loadingFrac = liveLoadMW / Math.max(0.1, capacity);
-  const solarFrac = liveSolarMW / Math.max(0.1, feederSolarCapMW);
-  const voltagePu = 1.002 - 0.032 * loadingFrac + 0.018 * solarFrac + 0.003 * jitter3;
-  const voltageKV = voltagePu * 11.0;
-  const voltageDevPct = (voltagePu - 1) * 100;
-  const devSign = voltageDevPct >= 0 ? "+" : "";
+  const totalEnergy = formatEnergy(bundle.kpis.energyMWh);
+  const prevEnergy = formatEnergy(bundle.kpis.prevEnergyMWh);
 
   return (
     <Card className="overflow-hidden border-border/70 bg-gradient-to-br from-background via-background to-muted/40 p-4 lg:p-5">
@@ -200,10 +195,10 @@ function FeederOverview({
             note={`${apparentMVA.toFixed(2)} MVA · ${loadingPct.toFixed(1)}% load`}
           />
           <InlineStat
-            label="Bus voltage"
-            value={voltagePu.toFixed(3)}
-            unit="p.u."
-            note={`${voltageKV.toFixed(2)} kV (${devSign}${voltageDevPct.toFixed(1)}%)`}
+            label="Total energy"
+            value={totalEnergy.value}
+            unit={totalEnergy.unit}
+            note={`24h forecast · ${prevEnergy.full} prev`}
           />
           <InlineStat
             label="Solar offset"
