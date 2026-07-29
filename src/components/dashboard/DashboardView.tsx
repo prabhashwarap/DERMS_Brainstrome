@@ -34,7 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { StatTile, Term } from "./tiles";
+import { StatTile } from "./tiles";
 import { Sparkline } from "./Sparkline";
 import { SupplyStack } from "./SupplyStack";
 import { FrequencyPanel } from "./FrequencyPanel";
@@ -42,20 +42,13 @@ import { SupplyMix } from "./SupplyMix";
 import { SolarToday } from "./SolarToday";
 import { RampPanel } from "./RampPanel";
 import { EventsPanel } from "./EventsPanel";
-import { formatLKT } from "@/pipeline/calendar";
 import { installedSolarMW } from "@/pipeline/system/fleet";
 import { FEEDER_LIST, capacityMW, type FeederId } from "@/pipeline/feeders";
 import type { Bundle } from "@/pipeline/forecast";
-import {
-  LEVEL_CLASS,
-  NOMINAL_HZ,
-  THRESHOLDS,
-  classifyCeiling,
-  classifyDeviation,
-} from "@/pipeline/system/thresholds";
+import { THRESHOLDS, classifyCeiling } from "@/pipeline/system/thresholds";
 import type { SystemTick } from "@/pipeline/system/types";
 import { useFleetTick, useStackSeries, useSystemTick, type StackRow } from "@/lib/useBalance";
-import { cn, formatMW, formatSignedMW } from "@/lib/utils";
+import { formatMW, formatSignedMW } from "@/lib/utils";
 
 export function DashboardView({
   bundle,
@@ -75,8 +68,6 @@ export function DashboardView({
       <h1 className="sr-only">Grid balance dashboard</h1>
 
       <FeederOverview bundle={bundle} feederId={feederId} onFeederChange={onFeederChange} tick={tick} />
-
-      <StatusRibbon tick={tick} />
 
       {/* The two charts that carry the page: what supply did, and whether
           balance held while it did it. */}
@@ -238,77 +229,6 @@ function MetricRow({ label, value }: { label: string; value: string }) {
 }
 
 /**
- * The ribbon operators glance at from across the room: is the feed live, what
- * time is the data, and the three system totals that frame everything below.
- * It carries no chart and no colour unless something is deviating.
- */
-function StatusRibbon({ tick }: { tick: SystemTick }) {
-  const freqLevel = classifyDeviation(tick.frequencyHz - NOMINAL_HZ, THRESHOLDS.frequencyHz);
-
-  return (
-    <Card className="flex flex-wrap items-center gap-x-6 gap-y-3 px-5 py-3">
-      <span className="flex items-center gap-2">
-        {/* Liveness is stated, not implied. A page of frozen numbers looks
-            exactly like a page of live ones. */}
-        <span className="relative flex h-2 w-2" aria-hidden>
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--status-normal)] opacity-60" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--status-normal)]" />
-        </span>
-        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-          Live · 1 s
-        </span>
-        <span className="tnum text-sm font-medium">{formatLKT(tick.ts, { time: true })} LKT</span>
-      </span>
-
-      <span className="hidden h-6 w-px bg-border sm:block" aria-hidden />
-
-      <Chip label="Demand" value={`${formatMW(tick.loadMW)} MW`} />
-      <Chip
-        label="Net balance"
-        value={`${formatSignedMW(tick.imbalanceMW)} MW`}
-        note={tick.imbalanceMW >= 0 ? "surplus" : "deficit"}
-      />
-      <Chip
-        label="Frequency"
-        value={`${tick.frequencyHz.toFixed(3)} Hz`}
-        level={freqLevel}
-        dot
-      />
-
-      <p className="ml-auto max-w-md text-[11px] leading-snug text-muted-foreground">
-        Frequency and inertia observed from CEB SCADA · curtailment and storage
-        under LECO control.
-      </p>
-    </Card>
-  );
-}
-
-function Chip({
-  label,
-  value,
-  note,
-  level = "normal",
-  dot = false,
-}: {
-  label: string;
-  value: string;
-  note?: string;
-  level?: "normal" | "warning" | "critical";
-  dot?: boolean;
-}) {
-  return (
-    <span className="flex flex-col leading-tight">
-      <span className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</span>
-      <span className="flex items-center gap-1.5">
-        {dot && <span className={cn("h-2 w-2 rounded-full", LEVEL_CLASS[level].dot)} aria-hidden />}
-        <span className={cn("tnum text-sm font-medium", LEVEL_CLASS[level].text)}>{value}</span>
-        {note && <span className="text-[11px] text-muted-foreground">{note}</span>}
-      </span>
-    </span>
-  );
-}
-
-/**
  * The headline band: solar carried, and the three numbers that bound it.
  *
  * Solar delivered is the only large-type figure on the page apart from
@@ -322,57 +242,88 @@ function SolarHeadline({ tick, rows }: { tick: SystemTick; rows: StackRow[] }) {
   const available = tick.solarMW + tick.curtailedMW;
   const curtailPct = available > 1 ? (100 * tick.curtailedMW) / available : 0;
   const curtailLevel = classifyCeiling(curtailPct, THRESHOLDS.curtailmentPct);
+  const generationMW = tick.generationMW;
+  const solarSharePct = generationMW > 0 ? (100 * tick.solarMW) / generationMW : 0;
+  const conventionalSharePct = generationMW > 0 ? (100 * tick.conventionalMW) / generationMW : 0;
+  const floorGapMW = Math.max(0, tick.conventionalMW - tick.conventionalFloorMW);
 
   return (
-    <Card className="grid grid-cols-1 gap-6 p-5 lg:grid-cols-[minmax(0,300px)_1fr]">
-      <div className="flex flex-col gap-2">
-        <Term help="Solar delivered to the grid right now. The quantity this system exists to raise.">
-          Solar now
-        </Term>
-        <div className="flex items-baseline gap-2">
-          <span className="tnum text-[56px] font-semibold leading-none tracking-tight">
-            {formatMW(tick.solarMW)}
-          </span>
-          <span className="text-base font-medium text-muted-foreground">MW</span>
-        </div>
-        <div className="tnum text-xs text-muted-foreground">
-          against {formatMW(tick.loadMW)} MW demand
-        </div>
-        <div className="mt-1">
-          <Sparkline
-            values={solarSeries}
-            width={280}
-            height={40}
-            stroke="var(--src-solar)"
-            label={`Solar output over the last 6 hours, ${formatMW(tick.solarMW)} megawatts now`}
-            className="w-full"
-          />
-          <div className="mt-1 text-[11px] text-muted-foreground">
-            last 6 h · {formatMW(installedSolarMW())} MW installed
+    <Card className="overflow-hidden border-border/70 bg-gradient-to-br from-background via-background to-muted/40 p-5">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)] lg:items-start">
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-[11px] font-medium uppercase tracking-[0.24em] text-muted-foreground">
+                Generation
+              </div>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="tnum text-[48px] font-semibold leading-none tracking-tight text-foreground">
+                  {formatMW(generationMW)}
+                </span>
+                <span className="text-sm font-medium text-muted-foreground">MW online</span>
+              </div>
+            </div>
+            <div className="rounded-full border border-border/70 bg-background/70 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
+              Live dispatch
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-border/70 bg-card/80 p-3 shadow-sm">
+            <div className="flex flex-wrap items-center gap-2 text-[12px] text-muted-foreground">
+              <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-2.5 py-1 text-primary">
+                <span className="h-2 w-2 rounded-full bg-primary" />
+                Solar {formatMW(tick.solarMW)} MW
+              </span>
+              <span className="inline-flex items-center gap-2 rounded-full bg-muted px-2.5 py-1">
+                <span className="h-2 w-2 rounded-full bg-[var(--src-conventional)]" />
+                Conventional {formatMW(tick.conventionalMW)} MW
+              </span>
+              <span className="inline-flex items-center gap-2 rounded-full bg-muted px-2.5 py-1">
+                <span className="h-2 w-2 rounded-full bg-[var(--src-import)]" />
+                Net import {formatSignedMW(tick.interchangeMW)} MW
+              </span>
+            </div>
+            <div className="mt-3">
+              <Sparkline
+                values={solarSeries}
+                width={280}
+                height={40}
+                stroke="var(--src-solar)"
+                label={`Generation mix over the last 6 hours, ${formatMW(generationMW)} megawatts now`}
+                className="w-full"
+              />
+            </div>
+            <div className="mt-2 text-[11px] text-muted-foreground">
+              Last 6 h · {formatMW(installedSolarMW())} MW installed · demand {formatMW(tick.loadMW)} MW
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <StatTile
-          label="Curtailed"
-          help="Solar available but not taken, because conventional plant is already at its minimum."
-          value={formatMW(tick.curtailedMW)}
-          unit="MW"
-          level={tick.curtailedMW > 0.5 ? curtailLevel : "normal"}
-          footnote={
-            tick.curtailedMW > 0.5
-              ? `${curtailPct.toFixed(0)} % of available`
-              : "None — all solar taken"
-          }
-        />
-        <StatTile
-          label="Room for more"
-          help="Additional solar the grid could absorb right now before the minimum-generation floor forces curtailment."
-          value={tick.solarHeadroomMW > 0 ? formatMW(tick.solarHeadroomMW) : "0"}
-          unit="MW"
-          footnote={tick.solarHeadroomMW > 0 ? "Before spill begins" : "Floor reached"}
-        />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+          <StatTile
+            label="Solar output"
+            help="Solar actually delivered to the system at this instant."
+            value={formatMW(tick.solarMW)}
+            unit="MW"
+            level={tick.curtailedMW > 0.5 ? curtailLevel : "normal"}
+            footnote={
+              tick.curtailedMW > 0.5
+                ? `${curtailPct.toFixed(0)}% of available curtailed`
+                : `${solarSharePct.toFixed(0)}% of generation`
+            }
+          />
+          <StatTile
+            label="Conventional output"
+            help="Dispatchable generation currently online and feeding the system."
+            value={formatMW(tick.conventionalMW)}
+            unit="MW"
+            footnote={
+              tick.conventionalMW > tick.conventionalFloorMW
+                ? `${floorGapMW.toFixed(0)} MW above floor`
+                : `${conventionalSharePct.toFixed(0)}% of generation`
+            }
+          />
+        </div>
       </div>
     </Card>
   );
