@@ -25,7 +25,7 @@ export const CONVENTIONAL = {
   /** Minimum stable generation of must-run plant, MW (Coal + Hydro must-run). */
   floorMW: 420,
   /** Maximum available conventional output, MW. Must cover peak with the tie. */
-  capMW: 1850,
+  capMW: 2550,
   /** Aggregate inertia contribution when at floor, GW·s. */
   inertiaAtFloorGWs: 2.1,
   /** Additional inertia per MW above floor, GW·s/MW. */
