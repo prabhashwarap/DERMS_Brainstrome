@@ -13,6 +13,13 @@ import { ConfigPanel } from "@/components/ConfigPanel";
 const ForecastPlus = lazy(() =>
   import("@/components/ForecastPlus").then((m) => ({ default: m.ForecastPlus }))
 );
+// The Dashboard is the landing page, so it is imported eagerly. Splitting it out
+// would put a round-trip and a Suspense flash on the first paint to save nothing
+// — the code is needed immediately either way. (It was lazy while it was the
+// secondary "Balance" destination; that reason went away with the rename.)
+import { DashboardView } from "@/components/dashboard/DashboardView";
+import { AlarmDrawer } from "@/components/dashboard/AlarmDrawer";
+import { AlarmProvider } from "@/lib/alarms";
 import { FEEDERS, type FeederId } from "@/pipeline/feeders";
 import { runForecast, type PredictionOverrides } from "@/pipeline/forecast";
 import { lastRunAtOrBefore, scheduleDailyRun } from "@/pipeline/scheduler";
@@ -29,7 +36,7 @@ export default function App() {
   const [hoverTs, setHoverTs] = useState<number | null>(null);
   const [theme, setTheme] = useState<"dark" | "light">("light");
   const [isConfigOpen, setIsConfigOpen] = useState(false);
-  const [activeNav, setActiveNav] = useState<NavId>("forecasting");
+  const [activeNav, setActiveNav] = useState<NavId>("dashboard");
   const [predictionOverrides, setPredictionOverrides] = useState<PredictionOverrides>({});
 
   useEffect(() => {
@@ -51,24 +58,28 @@ export default function App() {
     [feederId, runAt, predictionOverrides]
   );
 
+  const title =
+    activeNav === "dashboard" ? "Dashboard" : activeNav === "forecastPlus" ? "Forecast+" : "Forecasting";
+
   return (
     <TooltipProvider delayDuration={200}>
+      <AlarmProvider>
       <AppShell
-        title="Forecasting"
+        title={title}
         theme={theme}
         activeNav={activeNav}
         onNavChange={setActiveNav}
         onThemeChange={setTheme}
         onConfigToggle={() => setIsConfigOpen(true)}
       >
-        {activeNav === "forecastPlus" ? (
-          <Suspense
-            fallback={
-              <div className="flex flex-1 items-center justify-center p-10 text-sm text-muted-foreground">
-                Loading grid map…
-              </div>
-            }
-          >
+        {activeNav === "dashboard" ? (
+          <DashboardView
+            bundle={bundle}
+            feederId={feederId}
+            onFeederChange={setFeederId}
+          />
+        ) : activeNav === "forecastPlus" ? (
+          <Suspense fallback={<Loading label="Loading grid map…" />}>
             <ForecastPlus />
           </Suspense>
         ) : (
@@ -113,6 +124,18 @@ export default function App() {
         overrides={predictionOverrides}
         onOverridesChange={setPredictionOverrides}
       />
+      {/* Alarms cut across every destination, so the drawer sits outside the
+          routed content rather than inside the Dashboard. */}
+      <AlarmDrawer />
+      </AlarmProvider>
     </TooltipProvider>
+  );
+}
+
+function Loading({ label }: { label: string }) {
+  return (
+    <div className="flex flex-1 items-center justify-center p-10 text-sm text-muted-foreground">
+      {label}
+    </div>
   );
 }

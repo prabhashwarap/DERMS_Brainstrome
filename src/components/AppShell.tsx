@@ -16,15 +16,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/Logo";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useAlarms } from "@/lib/alarms";
 import { cn } from "@/lib/utils";
 
 /**
  * Platform chrome.
  *
  * The Oversight+ shell: persistent left rail, thin top bar, content area. Only
- * Forecasting is built — the rest of the rail is rendered inert rather than
- * omitted, so the pilot sits in its real position in the product and the
- * navigation doesn't have to be redesigned when it merges in.
+ * Dashboard, Forecasting and Forecast+ are built — the rest of the rail is
+ * rendered inert rather than omitted, so the pilot sits in its real position in
+ * the product and the navigation doesn't have to be redesigned when it merges in.
  */
 
 export const NAV = [
@@ -39,6 +40,9 @@ export const NAV = [
 ] as const;
 
 export type NavId = (typeof NAV)[number]["id"];
+
+/** The destinations that are actually built. The rest render inert. */
+const LIVE: ReadonlySet<string> = new Set(["dashboard", "forecasting", "forecastPlus"]);
 
 interface Props {
   title: string;
@@ -113,7 +117,7 @@ function Sidebar({ open, onClose, activeNav, onNavChange }: { open: boolean; onC
               </a>
             );
           }
-          if (id === "forecasting" || id === "forecastPlus") {
+          if (LIVE.has(id)) {
              return (
                <button
                  key={id}
@@ -166,6 +170,49 @@ function Sidebar({ open, onClose, activeNav, onNavChange }: { open: boolean; onC
   );
 }
 
+/**
+ * The bell is the only cross-cutting control in the chrome: alarms have to be
+ * reachable from every destination without leaving the one you are on.
+ *
+ * It subscribes to the alarm context itself rather than taking props, so a
+ * re-evaluation repaints this button and nothing else.
+ */
+function AlarmBell() {
+  const { unacknowledged, criticalCount, setOpen } = useAlarms();
+  const hasCritical = criticalCount > 0;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setOpen(true)}
+          aria-label={`Alarms — ${unacknowledged} unacknowledged`}
+          className="relative"
+        >
+          <Bell className="h-5 w-5" />
+          {unacknowledged > 0 && (
+            <span
+              className={cn(
+                "absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold text-white",
+                hasCritical ? "bg-[var(--status-critical)]" : "bg-[var(--status-warning)]"
+              )}
+            >
+              {unacknowledged}
+            </span>
+          )}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        {unacknowledged > 0
+          ? `${unacknowledged} unacknowledged alarm${unacknowledged === 1 ? "" : "s"}`
+          : "No unacknowledged alarms"}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function TopBar({
   title,
   theme,
@@ -205,19 +252,9 @@ function TopBar({
           </TooltipContent>
         </Tooltip>
 
-        {/* Reserved for post-v1 alerting. */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span>
-              <Button variant="ghost" size="icon" disabled aria-label="Notifications (not in v1)">
-                <Bell className="h-5 w-5" />
-              </Button>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>Alerting arrives after v1 - space reserved.</TooltipContent>
-        </Tooltip>
+        <AlarmBell />
 
-        {activeNav !== "forecastPlus" && (
+        {activeNav !== "forecastPlus" && activeNav !== "dashboard" && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost" size="icon" onClick={onConfigToggle} aria-label="Open configuration">

@@ -65,6 +65,25 @@
     --viz-ev-actual: #A855F7;
     --viz-ev-forecast: #C084FC;
     --viz-ev-band: rgba(192, 132, 252, 0.18);
+
+    /* Supply-source palette (dark).
+       Solar, battery and import are the identified series and were validated
+       against the #17182E surface — lightness band, chroma floor, adjacent-pair
+       CVD separation, normal-vision floor and contrast all pass. Adjacent
+       stacked segments carry a 2px surface gap as secondary encoding.
+
+       Conventional is deliberately a neutral, near-achromatic tone rather than a
+       fourth identity: it is the backdrop solar is measured against, and giving
+       it a hue would let it compete with the series that matter. */
+    --src-conventional: #4A5568;
+    --src-solar: #BE7F08;
+    --src-battery: #8B5CF6;
+    --src-import: #DB2777;
+
+    /* Status — reserved, never reused as a series colour. */
+    --status-normal: #64748B;
+    --status-warning: #D97706;
+    --status-critical: #DC2626;
   }
 
   :root[data-theme="light"] {
@@ -112,6 +131,17 @@
     --viz-ev-actual: #7C3AED;
     --viz-ev-forecast: #9333EA;
     --viz-ev-band: rgba(124, 58, 237, 0.18);
+
+    /* Supply-source palette (light) — re-stepped for the white surface and
+       separately validated, not an automatic flip of the dark set. */
+    --src-conventional: #94A3B8;
+    --src-solar: #B8860B;
+    --src-battery: #7C3AED;
+    --src-import: #DB2777;
+
+    --status-normal: #64748B;
+    --status-warning: #B45309;
+    --status-critical: #B91C1C;
   }
 
   * {

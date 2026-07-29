@@ -124,13 +124,13 @@ export function loadFeederHistory(feeder: Feeder, opts: HistoryOptions): Reading
   const endDay = startOfLocalDay(opts.now) + 2 * 86_400_000;
   const startDay = endDay - (days + 2) * 86_400_000;
 
-  // `grossShape` is normalised to about 1.15 at its evening maximum, so the
-  // scale factor here lands the annual peak comfortably inside firm capacity.
-  const peakMW = capacityMW(feeder) * 0.58;
-  // Rooftop PV is sized against the feeder's own peak: on a high-penetration
-  // feeder a clear midday pushes metered net load below the morning shoulder,
-  // which is what makes the duck curve a duck.
-  const solarPeak = peakMW * feeder.solarPenetration * 1.8;
+  // The synthetic feeder is sized to typical medium-voltage utility loading,
+  // keeping peaks below firm capacity while still showing the seasonal and
+  // diurnal shape expected in field telemetry.
+  const peakMW = capacityMW(feeder) * (feeder.profile === "industrial" ? 0.66 : 0.6);
+  // Rooftop PV is sized against the feeder's own peak and is deliberately
+  // strong enough to create a visible midday dip on higher-penetration feeders.
+  const solarPeak = peakMW * Math.min(0.4, feeder.solarPenetration * 1.4 + 0.06);
 
   const readings: Reading[] = [];
   let tempAnom = 0;

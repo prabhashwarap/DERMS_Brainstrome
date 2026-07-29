@@ -23,6 +23,25 @@ export function formatPower(valMW: number): { value: string; unit: string; full:
 }
 
 /**
+ * System-scale power, MW.
+ *
+ * `formatPower` drops to kW below 1 MW, which is right at feeder scale and
+ * wrong at system scale — a 0.4 MW imbalance is not "400 kW" to a balancing
+ * operator. This one stays in MW throughout and sheds decimals as the number
+ * grows, so a column of figures aligns.
+ */
+export function formatMW(valMW: number): string {
+  const abs = Math.abs(valMW);
+  if (abs >= 100) return valMW.toFixed(0);
+  if (abs >= 10) return valMW.toFixed(1);
+  return valMW.toFixed(2);
+}
+
+/** Signed variant, for deltas and imbalances where the sign is the message. */
+export const formatSignedMW = (valMW: number): string =>
+  `${valMW > 0 ? "+" : valMW < 0 ? "−" : ""}${formatMW(Math.abs(valMW))}`;
+
+/**
  * Dynamic Energy Formatter:
  * Automatically scales between kWh and MWh depending on magnitude.
  * If abs(valMWh) >= 1.0, returns value in MWh (e.g., "1.85", unit: "MWh").
