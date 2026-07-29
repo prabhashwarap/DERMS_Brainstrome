@@ -16,8 +16,8 @@
 import { memo, useMemo } from "react";
 import {
   Area,
+  AreaChart,
   CartesianGrid,
-  ComposedChart,
   Line,
   ReferenceLine,
   ResponsiveContainer,
@@ -72,15 +72,18 @@ export const SupplyStack = memo(function SupplyStack({
   }, [rows]);
 
   const chartRows = useMemo(() => {
-    return rows.map((r) => ({
-      ts: r.ts,
-      demand: r.load ?? 0,
-      conventional: r.conventional ?? 0,
-      solar: r.solar ?? 0,
-      battery: r.battery ?? 0,
-      import: r.import ?? 0,
-      spilled: Math.max(0, (r.solarPotential ?? 0) - (r.solar ?? 0)),
-    }));
+    return rows.map((r) => {
+      const conventional = r.conventional ?? 0;
+      const solar = r.solar ?? 0;
+      const battery = r.battery ?? 0;
+      const importValue = r.import ?? 0;
+      return {
+        ts: r.ts,
+        demand: r.load ?? 0,
+        supply: conventional + solar + battery + importValue,
+        balance: conventional + solar + battery + importValue - (r.load ?? 0),
+      };
+    });
   }, [rows]);
 
   const netBalanceMW = tick.generationMW - tick.loadMW;
@@ -111,7 +114,7 @@ export const SupplyStack = memo(function SupplyStack({
 
       <div className="h-[280px] w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartRows} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
+          <AreaChart data={chartRows} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
             <CartesianGrid stroke="var(--viz-grid)" vertical={false} />
             <XAxis
               dataKey="ts"
@@ -134,60 +137,18 @@ export const SupplyStack = memo(function SupplyStack({
             />
             <Area
               type="monotone"
-              dataKey="conventional"
-              stackId="supply"
+              dataKey="supply"
               fill="var(--src-conventional)"
-              fillOpacity={0.72}
-              stroke="var(--viz-surface)"
-              strokeWidth={1.5}
-              isAnimationActive={false}
-            />
-            <Area
-              type="monotone"
-              dataKey="solar"
-              stackId="supply"
-              fill="var(--src-solar)"
-              fillOpacity={0.8}
-              stroke="var(--viz-surface)"
-              strokeWidth={1.5}
-              isAnimationActive={false}
-            />
-            <Area
-              type="monotone"
-              dataKey="battery"
-              stackId="supply"
-              fill="var(--src-battery)"
-              fillOpacity={0.8}
-              stroke="var(--viz-surface)"
-              strokeWidth={1.5}
-              isAnimationActive={false}
-            />
-            <Area
-              type="monotone"
-              dataKey="import"
-              stackId="supply"
-              fill="var(--src-import)"
-              fillOpacity={0.8}
-              stroke="var(--viz-surface)"
-              strokeWidth={1.5}
-              isAnimationActive={false}
-            />
-            <Area
-              type="monotone"
-              dataKey="spilled"
-              stackId="supply"
-              fill="var(--src-solar)"
-              fillOpacity={0.18}
-              stroke="var(--src-solar)"
-              strokeWidth={1}
-              strokeDasharray="3 3"
+              fillOpacity={0.25}
+              stroke="var(--src-conventional)"
+              strokeWidth={2}
               isAnimationActive={false}
             />
             <Line
               type="monotone"
               dataKey="demand"
               stroke={DEMAND_COLOR}
-              strokeWidth={2}
+              strokeWidth={2.2}
               dot={false}
               isAnimationActive={false}
             />
@@ -198,7 +159,7 @@ export const SupplyStack = memo(function SupplyStack({
               label={{ value: "now", position: "top", fill: "var(--viz-axis)", fontSize: 11 }}
             />
             <RTooltip content={<StackTooltip />} cursor={{ stroke: "var(--viz-divider)" }} />
-          </ComposedChart>
+          </AreaChart>
         </ResponsiveContainer>
       </div>
     </Card>
@@ -223,11 +184,7 @@ function StackTooltip({
 
   const byKey = new Map(payload.map((p) => [p.dataKey, p.value]));
   const demand = byKey.get("demand") ?? 0;
-  const conventional = byKey.get("conventional") ?? 0;
-  const solar = byKey.get("solar") ?? 0;
-  const battery = byKey.get("battery") ?? 0;
-  const importValue = byKey.get("import") ?? 0;
-  const supply = conventional + solar + battery + importValue;
+  const supply = byKey.get("supply") ?? 0;
   const balance = supply - demand;
 
   return (
@@ -240,20 +197,8 @@ function StackTooltip({
             <td className="text-right font-medium">{formatMW(demand)}</td>
           </tr>
           <tr>
-            <td className="pr-2">Conventional</td>
-            <td className="text-right font-medium">{formatMW(conventional)}</td>
-          </tr>
-          <tr>
-            <td className="pr-2">Solar</td>
-            <td className="text-right font-medium">{formatMW(solar)}</td>
-          </tr>
-          <tr>
-            <td className="pr-2">Battery</td>
-            <td className="text-right font-medium">{formatMW(battery)}</td>
-          </tr>
-          <tr>
-            <td className="pr-2">Import</td>
-            <td className="text-right font-medium">{formatMW(importValue)}</td>
+            <td className="pr-2">Supply</td>
+            <td className="text-right font-medium">{formatMW(supply)}</td>
           </tr>
           <tr className="border-t border-border">
             <td className="pr-2 pt-1">Net balance</td>
