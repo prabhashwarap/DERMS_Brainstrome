@@ -1,6 +1,6 @@
 # Code Map (graphify)
 
-_50 files · 170 exported symbols · regenerate with `npm run graphify`._
+_53 files · 174 exported symbols · regenerate with `npm run graphify`._
 
 Read this map to locate code, then open only the file(s) you need. Signatures are compact (params + annotated return type); tags like `[memo]` note wrappers.
 
@@ -53,8 +53,14 @@ Read this map to locate code, then open only the file(s) you need. Signatures ar
 ## src/components/dashboard/AlarmDrawer.tsx
 - AlarmDrawer()
 
+## src/components/dashboard/BatteryStorageChart.tsx
+- BatteryStorageChart({ rows, now, tick, }: { rows: StackRow[]; now: number; tick: SystemTick; })  [memo]
+
 ## src/components/dashboard/DashboardView.tsx
 - DashboardView({ bundle, feederId, onFeederChange, }: { bundle: Bundle; feederId: FeederId; onFeederChange: (id: FeederId) => void; })
+
+## src/components/dashboard/EvChargingChart.tsx
+- EvChargingChart({ rows, now, tick, }: { rows: StackRow[]; now: number; tick: SystemTick; })  [memo]
 
 ## src/components/dashboard/EventsPanel.tsx
 - EventsPanel()
@@ -64,6 +70,9 @@ Read this map to locate code, then open only the file(s) you need. Signatures ar
 
 ## src/components/dashboard/RampPanel.tsx
 - RampPanel({ now, units, }: { now: number; units: (UnitTick | BessTick)[]; })  [memo]
+
+## src/components/dashboard/SolarExportChart.tsx
+- SolarExportChart({ rows, now, tick, }: { rows: StackRow[]; now: number; tick: SystemTick; })  [memo]
 
 ## src/components/dashboard/SolarToday.tsx
 - SolarToday({ now }: { now: number })  [memo]
@@ -240,6 +249,7 @@ Read this map to locate code, then open only the file(s) you need. Signatures ar
 - fn largestInfeedMW(): number
 
 ## src/pipeline/system/source.ts
+- fn socAt(h: number)
 - fn sampleSystemTick(ts: number): SystemTick
 - fn sampleUnitTicks(ts: number): (UnitTick | BessTick)[]
 - fn sampleBusTicks(ts: number): BusTick[]

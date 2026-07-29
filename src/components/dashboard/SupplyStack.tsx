@@ -1,16 +1,8 @@
 /**
  * Supply and demand — the spine of the dashboard.
  *
- * The convention every system operator's public dashboard converges on: supply
- * stacked by source, demand as a single line over it, the forecast continuing
- * that same line past `now` in the same colour and dash. The gap between stack
- * and line *is* the imbalance, and it should be visible without reading a
- * number.
- *
- * The one departure is spilled solar, drawn as a translucent band above the
- * stack — deliberately above the demand line, because that is exactly what it
- * is: solar that existed, that the grid would not take. Kept translucent and
- * dashed so it can never read as supply.
+ * Stacks supply by source (Solar and Other), demand as a single line over it,
+ * and the forecast continuing that line past `now`.
  */
 
 import { memo, useMemo } from "react";
@@ -33,13 +25,10 @@ import { cn, formatMW, formatSignedMW } from "@/lib/utils";
 import type { SystemTick, SourceId } from "@/pipeline/system/types";
 
 const DEMAND_COLOR = "var(--viz-input)";
-const SUPPLY_COLOR = "var(--src-conventional)";
 
 export const SOURCE_COLOR: Record<SourceId, string> = {
-  conventional: "var(--src-conventional)",
+  other: "var(--src-conventional)",
   solar: "var(--src-solar)",
-  battery: "var(--src-battery)",
-  import: "var(--src-import)",
 };
 
 /**
@@ -57,15 +46,15 @@ export const SupplyStack = memo(function SupplyStack({
   now: number;
   tick: SystemTick;
 }) {
-  // Ticks on local hour boundaries. The past is sampled every 5 minutes and the
-  // forecast every 15, so letting recharts choose would space them unevenly.
+  // Ticks on local hour boundaries.
   const ticks = useMemo(() => {
     if (!rows.length) return [];
     const offset = LKT_OFFSET_MIN * 60_000;
     const from = rows[0].ts;
     const to = rows[rows.length - 1].ts;
     const out: number[] = [];
-    for (let t = Math.ceil((from + offset) / 3600_000) * 3600_000 - offset; t <= to; t += 3600_000) {
+    const stepMs = 4 * 3600_000;
+    for (let t = Math.ceil((from + offset) / stepMs) * stepMs - offset; t <= to; t += stepMs) {
       out.push(t);
     }
     return out;
@@ -73,43 +62,69 @@ export const SupplyStack = memo(function SupplyStack({
 
   const chartRows = useMemo(() => {
     return rows.map((r) => {
-      const conventional = r.conventional ?? 0;
-      const solar = r.solar ?? 0;
-      const battery = r.battery ?? 0;
-      const importValue = r.import ?? 0;
+      const other = Math.max(0, r.other ?? 0);
+      const solar = Math.max(0, r.solar ?? 0);
+      const totalSupply = other + solar;
+
+      const isPastOrNow = r.load !== undefined;
+      const isFutureOrNow = r.loadForecast !== undefined;
+      const demandVal = r.load ?? r.loadForecast ?? 0;
+      const spill = Math.max(0, r.solarPotential - solar);
+
       return {
         ts: r.ts,
-        demand: r.load ?? 0,
-        supply: conventional + solar + battery + importValue,
-        balance: conventional + solar + battery + importValue - (r.load ?? 0),
+        // Past stacked series
+        other: isPastOrNow ? other : undefined,
+        solar: isPastOrNow ? solar : undefined,
+        // Future stacked series
+        otherForecast: isFutureOrNow ? other : undefined,
+        solarForecast: isFutureOrNow ? solar : undefined,
+
+        // Demand lines
+        load: isPastOrNow ? r.load : undefined,
+        loadForecast: isFutureOrNow ? r.loadForecast : undefined,
+
+        // Raw numbers for tooltips
+        rawOther: other,
+        rawSolar: solar,
+        demandVal,
+        supplyVal: totalSupply,
+        spillVal: spill,
       };
     });
   }, [rows]);
 
-  const netBalanceMW = tick.generationMW - tick.loadMW;
+  const netBalanceMW = tick.generationMW + tick.interchangeMW - tick.loadMW;
   const balanceLevel = Math.abs(netBalanceMW) > 80 ? "critical" : Math.abs(netBalanceMW) > 35 ? "warning" : "normal";
 
   return (
     <Card className="flex flex-col gap-3 p-5">
-      <PanelHeader title="Supply and demand" note="Live balance · last 6 h metered · MW">
-        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-          <span className="h-2.5 w-2.5 rounded-full" style={{ background: DEMAND_COLOR }} />
-          <span>Demand</span>
-          <span className="h-2.5 w-2.5 rounded-full" style={{ background: SUPPLY_COLOR }} />
-          <span>Supply</span>
+      <PanelHeader title="Supply and demand" note="Live grid balance · 24 h metered · 24 h forecast · MW">
+        <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full" style={{ background: SOURCE_COLOR.solar }} />
+            <span>Solar</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full" style={{ background: SOURCE_COLOR.other }} />
+            <span>Other</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full" style={{ background: DEMAND_COLOR }} />
+            <span>Demand</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-0.5 w-3 border-t-2 border-dashed" style={{ borderColor: DEMAND_COLOR }} />
+            <span>Forecast</span>
+          </span>
         </div>
       </PanelHeader>
 
-      <div className="flex items-end justify-between gap-3">
-        <div className="flex items-baseline gap-2">
-          <span className={cn("tnum text-[34px] font-semibold leading-none tracking-tight", balanceLevel === "normal" ? "text-foreground" : balanceLevel === "warning" ? "text-[var(--status-warning)]" : "text-[var(--status-critical)]")}>
-            {formatSignedMW(netBalanceMW)}
-          </span>
-          <span className="text-sm font-medium text-muted-foreground">net balance</span>
-        </div>
-        <span className="tnum rounded-full border border-border/70 bg-muted/50 px-2.5 py-1 text-xs text-muted-foreground">
-          {formatMW(tick.generationMW)} MW gen / {formatMW(tick.loadMW)} MW load
+      <div className="flex items-baseline gap-2">
+        <span className={cn("tnum text-[34px] font-semibold leading-none tracking-tight", balanceLevel === "normal" ? "text-foreground" : balanceLevel === "warning" ? "text-[var(--status-warning)]" : "text-[var(--status-critical)]")}>
+          {formatSignedMW(netBalanceMW)}
         </span>
+        <span className="text-sm font-medium text-muted-foreground">MW net balance</span>
       </div>
 
       <div className="h-[280px] w-full">
@@ -135,22 +150,76 @@ export const SupplyStack = memo(function SupplyStack({
               width={44}
               tickFormatter={(v: number) => formatMW(v)}
             />
+
+            {/* Past Stacked Supply Areas */}
             <Area
+              stackId="supply"
               type="monotone"
-              dataKey="supply"
-              fill="var(--src-conventional)"
-              fillOpacity={0.25}
-              stroke="var(--src-conventional)"
-              strokeWidth={2}
+              dataKey="other"
+              fill={SOURCE_COLOR.other}
+              fillOpacity={0.45}
+              stroke={SOURCE_COLOR.other}
+              strokeWidth={1}
               isAnimationActive={false}
+              connectNulls={false}
+            />
+            <Area
+              stackId="supply"
+              type="monotone"
+              dataKey="solar"
+              fill={SOURCE_COLOR.solar}
+              fillOpacity={0.55}
+              stroke={SOURCE_COLOR.solar}
+              strokeWidth={1}
+              isAnimationActive={false}
+              connectNulls={false}
+            />
+
+            {/* Forecasted Stacked Supply Areas */}
+            <Area
+              stackId="supplyFc"
+              type="monotone"
+              dataKey="otherForecast"
+              fill={SOURCE_COLOR.other}
+              fillOpacity={0.2}
+              stroke={SOURCE_COLOR.other}
+              strokeDasharray="4 4"
+              strokeWidth={1}
+              isAnimationActive={false}
+              connectNulls={false}
+            />
+            <Area
+              stackId="supplyFc"
+              type="monotone"
+              dataKey="solarForecast"
+              fill={SOURCE_COLOR.solar}
+              fillOpacity={0.25}
+              stroke={SOURCE_COLOR.solar}
+              strokeDasharray="4 4"
+              strokeWidth={1}
+              isAnimationActive={false}
+              connectNulls={false}
+            />
+
+            {/* Demand Lines */}
+            <Line
+              type="monotone"
+              dataKey="load"
+              stroke={DEMAND_COLOR}
+              strokeWidth={2.4}
+              dot={false}
+              isAnimationActive={false}
+              connectNulls={false}
             />
             <Line
               type="monotone"
-              dataKey="demand"
+              dataKey="loadForecast"
               stroke={DEMAND_COLOR}
-              strokeWidth={2.2}
+              strokeDasharray="4 4"
+              strokeWidth={2.4}
               dot={false}
               isAnimationActive={false}
+              connectNulls={false}
             />
             <ReferenceLine
               x={now}
@@ -158,7 +227,7 @@ export const SupplyStack = memo(function SupplyStack({
               strokeDasharray="3 3"
               label={{ value: "now", position: "top", fill: "var(--viz-axis)", fontSize: 11 }}
             />
-            <RTooltip content={<StackTooltip />} cursor={{ stroke: "var(--viz-divider)" }} />
+            <RTooltip content={<StackTooltip now={now} />} cursor={{ stroke: "var(--viz-divider)" }} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -169,40 +238,78 @@ export const SupplyStack = memo(function SupplyStack({
 interface TooltipPayload {
   dataKey: string;
   value: number;
+  payload: {
+    ts: number;
+    rawOther: number;
+    rawSolar: number;
+    demandVal: number;
+    supplyVal: number;
+    spillVal: number;
+  };
 }
 
 function StackTooltip({
   active,
   payload,
   label,
+  now,
 }: {
   active?: boolean;
   payload?: TooltipPayload[];
   label?: number;
+  now?: number;
 }) {
   if (!active || !payload?.length || label == null) return null;
 
-  const byKey = new Map(payload.map((p) => [p.dataKey, p.value]));
-  const demand = byKey.get("demand") ?? 0;
-  const supply = byKey.get("supply") ?? 0;
+  const rowData = payload[0]?.payload;
+  const isForecast = label > (now ?? 0);
+  const demand = rowData?.demandVal ?? 0;
+  const other = rowData?.rawOther ?? 0;
+  const solar = rowData?.rawSolar ?? 0;
+  const supply = other + solar;
   const balance = supply - demand;
 
   return (
-    <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-lg">
-      <div className="mb-1.5 font-medium">{formatLKT(label, { date: true, time: true })}</div>
-      <table className="tnum">
+    <div className="rounded-lg border border-border bg-popover px-3 py-2.5 text-xs shadow-lg">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <span className="font-medium">{formatLKT(label, { date: true, time: true })}</span>
+        <span
+          className={cn(
+            "rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider",
+            isForecast ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+          )}
+        >
+          {isForecast ? "Forecast" : "Metered"}
+        </span>
+      </div>
+      <table className="tnum w-full">
         <tbody>
           <tr>
-            <td className="pr-2">Demand</td>
+            <td className="pr-3 text-muted-foreground">Demand</td>
             <td className="text-right font-medium">{formatMW(demand)}</td>
           </tr>
+          <tr className="border-t border-border/50">
+            <td className="pr-3 text-[11px] text-muted-foreground">Solar</td>
+            <td className="text-right text-[11px] font-medium text-[var(--src-solar)]">{formatMW(solar)}</td>
+          </tr>
           <tr>
-            <td className="pr-2">Supply</td>
-            <td className="text-right font-medium">{formatMW(supply)}</td>
+            <td className="pr-3 text-[11px] text-muted-foreground">Other</td>
+            <td className="text-right text-[11px] font-medium">{formatMW(other)}</td>
           </tr>
           <tr className="border-t border-border">
-            <td className="pr-2 pt-1">Net balance</td>
-            <td className="pt-1 text-right font-medium">{formatSignedMW(balance)}</td>
+            <td className="pr-3 pt-1 font-medium">Total Supply</td>
+            <td className="pt-1 text-right font-medium">{formatMW(supply)}</td>
+          </tr>
+          <tr>
+            <td className="pr-3 pt-0.5 font-medium">Net balance</td>
+            <td
+              className={cn(
+                "pt-0.5 text-right font-semibold",
+                Math.abs(balance) > 50 ? "text-[var(--status-warning)]" : "text-foreground"
+              )}
+            >
+              {formatSignedMW(balance)}
+            </td>
           </tr>
         </tbody>
       </table>

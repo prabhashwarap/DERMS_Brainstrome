@@ -27,8 +27,8 @@ import type {
   UnitTick,
 } from "./types";
 
-/** System peak demand, MW. Scales the whole model. */
-const SYSTEM_PEAK_MW = 1450;
+/** System peak demand, MW (Sri Lanka National Peak Demand ~2,500 MW). Scales the whole model. */
+const SYSTEM_PEAK_MW = 2500;
 
 /** Frequency sensitivity to imbalance, Hz per MW. 20 MW ⇒ the 0.05 Hz warning. */
 const HZ_PER_MW = 0.0025;
@@ -125,25 +125,42 @@ function solarShape(h: number): number {
  * sun has gone. Battery power is derived from the *slope* of this curve rather
  * than specified separately, so power and energy can never disagree.
  */
+/**
+ * State of charge over the day, %.
+ *
+ * The schedule is tuned to realistic utility BESS operations:
+ * - Off-peak night (00:00-05:00): Gentle grid top-up charge from 35% to 42%
+ * - Morning peak (05:00-08:30): Discharge into morning demand ramp (42% to 28%)
+ * - Solar soak window (09:30-15:30): High-capacity charging (30% to 96%) to absorb
+ *   excess rooftop and utility solar, avoiding feeder voltage violations & curtailment
+ * - Pre-peak hold (15:30-17:30): High-SOC hold (96% to 94%) with HVAC cooling active
+ * - Evening peak (17:30-21:30): Peak-shaving discharge (94% to 22%) into evening peak
+ * - Night reset (21:30-24:00): Moderate recharge from 22% back to 35%
+ */
 const SOC_CURVE: [number, number][] = [
-  [0, 46],
-  [6, 38],
-  [9, 36],
-  [15, 94],
-  [18, 92],
-  [22, 32],
-  [24, 46],
+  [0, 35],
+  [5, 42],
+  [8.5, 28],
+  [9.5, 30],
+  [15.5, 96],
+  [17.5, 94],
+  [21.5, 22],
+  [24, 35],
 ];
 
-const socAt = (h: number) => piecewise(SOC_CURVE, h);
+export const socAt = (h: number) => piecewise(SOC_CURVE, h);
 
-/** Discharge power implied by the SOC slope, MW. Positive = discharging. */
-function batteryPowerMW(h: number, energyMWh: number): number {
+/** Discharge power implied by the SOC slope & RTE, MW. Positive = discharging, Negative = charging. */
+function batteryPowerMW(h: number, energyMWh: number, rte = 0.88): number {
   const dt = 0.05; // hours
   const hi = Math.min(24, h + dt);
   const lo = Math.max(0, h - dt);
   const span = hi - lo;
-  return span > 0 ? (-(socAt(hi) - socAt(lo)) / 100) * energyMWh / span : 0;
+  if (span <= 0) return 0;
+  const dSoc = socAt(hi) - socAt(lo);
+  const internalPowerMW = -(dSoc / 100) * energyMWh / span;
+  const eta = Math.sqrt(rte);
+  return internalPowerMW > 0 ? internalPowerMW * eta : internalPowerMW / eta;
 }
 
 /* ------------------------------------------------------------------ */
@@ -195,11 +212,12 @@ function computeState(ts: number): State {
     solarPotentialMW += outputs[u.id];
   }
 
-  // 2. Storage follows its solar-shaped schedule.
+  // 2. Storage follows its solar-shaped schedule & RTE efficiency bounds.
   let batteryMW = 0;
   for (const u of running) {
     if (u.kind !== "battery") continue;
-    const mw = clamp(batteryPowerMW(h, u.energyMWh ?? 0), -u.capacityMW, u.capacityMW);
+    const rte = u.id === "colombo_bess" ? 0.885 : 0.868;
+    const mw = clamp(batteryPowerMW(h, u.energyMWh ?? 0, rte), -u.capacityMW, u.capacityMW);
     outputs[u.id] = mw;
     batteryMW += mw;
   }
@@ -213,10 +231,8 @@ function computeState(ts: number): State {
     220
   );
 
-  // 4. A small AGC tracking lag — that lag is what becomes the imbalance,
-  //    rather than being bolted on afterwards.
-  const lag = 0.017 * noise(ts, 4 * 60_000, 61);
-  const demand = loadMW * (1 + lag);
+  // 4. Load-following AGC tracking maintains perfect supply-demand balance.
+  const demand = loadMW;
 
   // 5. The minimum-generation constraint, and the curtailment it forces.
   //
@@ -263,10 +279,8 @@ function computeState(ts: number): State {
     outputs,
     curtailPerUnit,
     bySource: {
-      conventional: conventionalMW,
+      other: conventionalMW + batteryMW + interchangeMW,
       solar: solarMW,
-      battery: batteryMW,
-      import: interchangeMW,
     },
     generationMW,
     conventionalMW,
@@ -310,6 +324,7 @@ export function sampleSystemTick(ts: number): SystemTick {
     solarHeadroomMW: now.solarHeadroomMW,
     conventionalMW: now.conventionalMW,
     conventionalFloorMW: CONVENTIONAL.floorMW,
+    batteryMW: now.outputs["colombo_bess"] + now.outputs["kotte_bess"],
     bySource: now.bySource,
     weather: now.weather,
   } as SystemTick;
@@ -319,7 +334,6 @@ export function sampleSystemTick(ts: number): SystemTick {
 export function sampleUnitTicks(ts: number): (UnitTick | BessTick)[] {
   const state = computeState(ts);
   const h = localParts(ts).decimalHour;
-  const clearSky = solarShape(h);
 
   return UNITS.map((u): UnitTick | BessTick => {
     const outputMW = state.outputs[u.id] ?? 0;
@@ -342,35 +356,76 @@ export function sampleUnitTicks(ts: number): (UnitTick | BessTick)[] {
       };
     }
 
+    const rte = u.id === "colombo_bess" ? 0.885 : 0.868;
+    const sohPct = u.id === "colombo_bess" ? 94.8 : 91.5;
+    const usableEnergyMWh = Math.round((u.energyMWh ?? 0) * (sohPct / 100) * 10) / 10;
+    const socPct = Math.round(socAt(h) * 10) / 10;
+
+    // Autonomous Fast Frequency Response (FFR) droop correction (+/- ~0.5 MW during frequency deviation)
+    const freqDev = state.frequencyHz - 50.0;
+    const droopMW = Math.abs(freqDev) > 0.01 ? clamp(-12 * (u.capacityMW / 60) * freqDev, -5, 5) : 0;
+    const netOutputMW = Math.round((outputMW + droopMW) * 10) / 10;
+
+    // Calculate C-rate (active power / nominal MWh capacity)
+    const cRate = Math.round((Math.abs(netOutputMW) / (u.energyMWh ?? 1)) * 100) / 100;
+
+    // Thermal physics with liquid-chilled HVAC stage response
+    const ambC = state.weather.tempC;
+    const jHeating = 14 * Math.pow(Math.abs(netOutputMW) / u.capacityMW, 1.35);
+    const rawTemp = ambC + jHeating + 1.2 * noise(ts, 25 * 60_000, u.id.length + 80);
+
+    let cellTempC = rawTemp;
+    let hvacStatus: "Off" | "Stage 1 (Eco)" | "Stage 2 (Max)" = "Off";
+    if (rawTemp >= 34) {
+      hvacStatus = "Stage 2 (Max)";
+      cellTempC = 26 + 0.25 * (rawTemp - 26);
+    } else if (rawTemp >= 28) {
+      hvacStatus = "Stage 1 (Eco)";
+      cellTempC = 25 + 0.45 * (rawTemp - 25);
+    } else {
+      hvacStatus = "Off";
+      cellTempC = rawTemp;
+    }
+    cellTempC = Math.round(cellTempC * 10) / 10;
+
+    // Operational mode classification
+    let mode: BessTick["mode"] = "Standby";
+    if (netOutputMW < -2) {
+      mode = h >= 9 && h <= 16.5 ? "Solar Soak Charging" : "Night Grid Top-Up";
+    } else if (netOutputMW > 2) {
+      mode = "Evening Peak Discharge";
+    } else if (Math.abs(freqDev) > 0.03) {
+      mode = "FFR Frequency Support";
+    }
+
+    const flags: string[] = [];
+    if (sohPct < 92) flags.push("Capacity fade > 8%");
+    if (cellTempC > 37) flags.push("High cell temp (HVAC Stage 2)");
+    if (cRate > 0.45) flags.push("High C-rate operational stress");
+    if (socPct > 95) flags.push("Solar soak buffer full (SoC > 95%)");
+    if (socPct < 15) flags.push("Low reserve warning (SoC < 15%)");
+
     const base: UnitTick = {
       unitId: u.id,
       ts,
-      outputMW,
-      reactiveMVAr: offline ? 0 : outputMW * (0.14 + 0.05 * noise(ts, 8 * 60_000, u.id.length)),
-      availableUpMW: 0,
-      availableDownMW: 0,
+      outputMW: netOutputMW,
+      reactiveMVAr: offline ? 0 : netOutputMW * (0.12 + 0.04 * noise(ts, 8 * 60_000, u.id.length)),
+      availableUpMW: offline || socPct <= 5 ? 0 : Math.min(u.capacityMW - netOutputMW, (socPct / 100) * usableEnergyMWh * 2),
+      availableDownMW: offline || socPct >= 95 ? 0 : Math.min(u.capacityMW + netOutputMW, ((100 - socPct) / 100) * usableEnergyMWh * 2),
       curtailedMW: 0,
       status: u.status,
     };
 
-    const socPct = socAt(h);
-    const cellTempC =
-      26 + 6 * Math.abs(outputMW) / u.capacityMW + 2 * noise(ts, 30 * 60_000, 81) + 3 * clearSky;
-    const sohPct = u.id === "colombo_bess" ? 94.2 : 91.2;
-    const flags: string[] = [];
-    if (sohPct < 90) flags.push("Capacity fade > 10 %");
-    if (cellTempC > 38) flags.push("Cell temperature high");
-
     return {
       ...base,
-      // Bounded by energy as well as power: it cannot discharge when empty or
-      // absorb more solar when full.
-      availableUpMW: offline || socPct <= 5 ? 0 : u.capacityMW - outputMW,
-      availableDownMW: offline || socPct >= 95 ? 0 : u.capacityMW + outputMW,
       socPct,
       sohPct,
       cellTempC,
-      roundTripEff: u.id === "colombo_bess" ? 0.882 : 0.861,
+      roundTripEff: rte,
+      cRate,
+      hvacStatus,
+      usableEnergyMWh,
+      mode,
       flags,
     };
   });

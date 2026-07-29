@@ -22,8 +22,7 @@ import { cn, formatMW, formatSignedMW } from "@/lib/utils";
 
 /** Why a category is negative — the one thing a signed MW figure cannot say. */
 const NEGATIVE_NOTE: Partial<Record<SourceId, string>> = {
-  battery: "charging",
-  import: "exporting",
+  other: "export/charging",
 };
 
 /**
@@ -37,7 +36,7 @@ export function SupplyMix({ tick }: { tick: SystemTick }) {
 
   return (
     <Card className="flex flex-col gap-4 p-5">
-      <PanelHeader title="Supply mix" note="Share of demand served at this instant" />
+      <PanelHeader title="Supply mix" note={`Serving ${formatMW(served)} MW at this instant`} />
 
       {/* 2px surface gaps between segments: the secondary encoding that keeps
           adjacent categories separable without relying on hue. */}
@@ -98,10 +97,6 @@ export function SupplyMix({ tick }: { tick: SystemTick }) {
         </tbody>
       </table>
 
-      <p className="tnum text-[11px] text-muted-foreground">
-        Serving {formatMW(tick.loadMW)} MW demand · must-run floor{" "}
-        {formatMW(tick.conventionalFloorMW)} MW
-      </p>
     </Card>
   );
 }

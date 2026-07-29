@@ -277,6 +277,7 @@ const FeederCard = memo(function FeederCard({ bundle }: { bundle: Bundle }) {
   }
 
   rows.push(["Firm Capacity", `${capStr} (${formattedCap})`]);
+  rows.push(["Nominal Voltage", "11.0 kV (0.95 - 1.05 p.u. band)"]);
 
   rows.push([
     "Prediction Day Type",

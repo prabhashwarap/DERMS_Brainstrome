@@ -22,14 +22,12 @@ export type UnitKind = "solar" | "battery";
 export type UnitStatus = "running" | "standby" | "forced-outage" | "planned-outage";
 
 /** Stack order for the supply chart — also the categorical colour order. */
-export const SOURCE_ORDER = ["conventional", "solar", "battery", "import"] as const;
+export const SOURCE_ORDER = ["solar", "other"] as const;
 export type SourceId = (typeof SOURCE_ORDER)[number];
 
 export const SOURCE_LABEL: Record<SourceId, string> = {
-  conventional: "Conventional",
   solar: "Solar",
-  battery: "Battery",
-  import: "Import",
+  other: "Other",
 };
 
 /** Nameplate description of a solar farm or battery. */
@@ -73,6 +71,14 @@ export interface BessTick extends UnitTick {
   sohPct: number;
   cellTempC: number;
   roundTripEff: number;
+  /** Current discharge/charge C-rate relative to rated energy capacity (e.g., 0.5C). */
+  cRate: number;
+  /** Active BMS thermal management state. */
+  hvacStatus: "Off" | "Stage 1 (Eco)" | "Stage 2 (Max)";
+  /** Effective usable capacity accounting for SOH degradation, MWh. */
+  usableEnergyMWh: number;
+  /** Operational mode classification based on dispatch schedule and grid response. */
+  mode: "Solar Soak Charging" | "Evening Peak Discharge" | "Night Grid Top-Up" | "FFR Frequency Support" | "Standby";
   /** Health flags raised by the BMS. Empty when nominal. */
   flags: string[];
 }
@@ -126,6 +132,7 @@ export interface SystemTick {
   conventionalMW: number;
   /** Minimum stable generation of must-run plant, MW. The binding constraint. */
   conventionalFloorMW: number;
+  batteryMW?: number;
 
   /** Supply split by source, MW. Sums to `generationMW` plus interchange. */
   bySource: Record<SourceId, number>;

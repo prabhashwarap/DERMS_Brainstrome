@@ -31,8 +31,8 @@ import type {
 const TRACE_SECONDS = 300;
 
 /** How far the generation stack looks back and forward, hours. */
-const STACK_BACK_H = 6;
-const STACK_FORWARD_H = 4;
+const STACK_BACK_H = 24;
+const STACK_FORWARD_H = 24;
 
 /**
  * The 1 Hz system tick plus a rolling 5-minute frequency trace.
@@ -78,10 +78,9 @@ export function useSystemTick(intervalMs = 1000): {
 
 export interface StackRow {
   ts: number;
-  conventional?: number;
+  other?: number;
   solar?: number;
   battery?: number;
-  import?: number;
   /** Metered demand — past only. */
   load?: number;
   /** Short-term demand forecast — future only, plus one bridging point. */
@@ -93,10 +92,10 @@ export interface StackRow {
   cloud: number;
 }
 
-const SOURCE_KEYS: SourceId[] = ["conventional", "solar", "battery", "import"];
+const SOURCE_KEYS: SourceId[] = ["other", "solar"];
 
 function buildStackRows(now: number): StackRow[] {
-  const back = sampleSystemSeries(now - STACK_BACK_H * 3600_000, now, 5 * 60_000);
+  const back = sampleSystemSeries(now - STACK_BACK_H * 3600_000, now, 15 * 60_000);
   const forward = sampleSystemSeries(
     now + 15 * 60_000,
     now + STACK_FORWARD_H * 3600_000,
@@ -105,6 +104,7 @@ function buildStackRows(now: number): StackRow[] {
 
   const toRow = (t: SystemTick): StackRow => ({
     ts: t.ts,
+    battery: t.batteryMW,
     solarPotential: t.solarMW + t.curtailedMW,
     ...t.weather,
   });
