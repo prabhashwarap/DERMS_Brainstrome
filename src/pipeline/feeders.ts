@@ -29,6 +29,7 @@ export interface Feeder {
   loadFactor: number;
   profile: "residential" | "industrial";
   mix: string;
+  phaseBalance?: string;
   seed: number;
 
   /** Grid hierarchy node type. */

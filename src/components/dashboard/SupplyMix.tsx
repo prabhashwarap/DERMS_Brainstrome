@@ -101,6 +101,10 @@ export function SupplyMix({ tick }: { tick: SystemTick }) {
         </tbody>
       </table>
 
+      <div className="flex items-center justify-between border-t border-border pt-2.5 text-[11px] text-muted-foreground">
+        <span>System Phase & Power Balance</span>
+        <span className="font-medium text-emerald-600 dark:text-emerald-400">100% Balanced (3-Phase)</span>
+      </div>
     </Card>
   );
 }

@@ -377,6 +377,9 @@ export function NodeDetailPanel({ node, onClose, onFilterToNode }: NodeDetailPan
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 {node.status || "Day-ahead forecast"}
               </span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+                Balanced 3-Phase
+              </span>
             </div>
             <h2 className="text-xl font-bold text-foreground truncate mt-0.5">
               {node.name}
