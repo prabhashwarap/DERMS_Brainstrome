@@ -21,6 +21,7 @@ import { DashboardView } from "@/components/dashboard/DashboardView";
 import { AlarmDrawer } from "@/components/dashboard/AlarmDrawer";
 import { AlarmProvider } from "@/lib/alarms";
 import { FEEDERS, type FeederId } from "@/pipeline/feeders";
+import { DEFAULT_FEEDER_ID } from "@/pipeline/system/fleet";
 import { runForecast, type PredictionOverrides } from "@/pipeline/forecast";
 import { lastRunAtOrBefore, scheduleDailyRun } from "@/pipeline/scheduler";
 
@@ -30,7 +31,11 @@ import { lastRunAtOrBefore, scheduleDailyRun } from "@/pipeline/scheduler";
  * it consumes is the same either way, which is the point of the split.
  */
 export default function App() {
-  const [feederId, setFeederId] = useState<FeederId>("angulana");
+  // One selection, shared by every destination. The dashboard, the forecast and
+  // the map all describe the same 11 kV feeder, so picking Katunayake on the
+  // dashboard and finding Angulana still loaded on Forecasting would be a bug
+  // rather than a feature.
+  const [feederId, setFeederId] = useState<FeederId>(DEFAULT_FEEDER_ID);
   const [range, setRange] = useState<RangeKey>("7d");
   const [showBaseline, setShowBaseline] = useState(false);
   const [hoverTs, setHoverTs] = useState<number | null>(null);
@@ -63,7 +68,7 @@ export default function App() {
 
   return (
     <TooltipProvider delayDuration={200}>
-      <AlarmProvider>
+      <AlarmProvider feederId={feederId}>
       <AppShell
         title={title}
         theme={theme}
@@ -73,10 +78,11 @@ export default function App() {
         onConfigToggle={() => setIsConfigOpen(true)}
       >
         {activeNav === "dashboard" ? (
+          // The balance model lives in pipeline/system and reads the same asset
+          // register the forecast does, so it needs the id and nothing else.
           <DashboardView
-            bundle={bundle}
             feederId={feederId}
-            onFeederChange={setFeederId}
+            onFeederChange={(id) => setFeederId(id as FeederId)}
           />
         ) : activeNav === "forecastPlus" ? (
           <Suspense fallback={<Loading label="Loading grid map…" />}>

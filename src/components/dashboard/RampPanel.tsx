@@ -1,15 +1,16 @@
 /**
- * Net-demand ramp ahead — the duck-curve panel.
+ * Net-demand ramp ahead — the duck-curve panel, at feeder scale.
  *
- * Net demand is demand minus solar, and its slope is what conventional plant and
- * storage actually have to follow. CAISO gives it a chart of its own beside
- * supply for exactly one reason: every megawatt of added solar makes the evening
- * ramp steeper, so the quantity that limits solar growth is not the midday
- * surplus but the slope after it.
+ * Net demand is feeder demand minus rooftop PV, and its slope is what the
+ * battery and the primary infeed actually have to follow. CAISO gives it a chart of
+ * its own beside supply for exactly one reason: every kilowatt of added PV makes
+ * the evening ramp steeper, so the quantity that limits PV growth is not the
+ * midday surplus but the slope after it. On this feeder sunset and the domestic
+ * evening peak are two hours apart, which makes the ramp unusually hard.
  *
  * Reported as *required against capability*, never as a bare MW/min. A ramp rate
- * on its own cannot be judged; the same 9 MW/min is routine for one fleet and an
- * incident for another.
+ * on its own cannot be judged; the same 0.4 MW/min is routine for one feeder and
+ * an incident for another.
  */
 
 import { memo, useMemo } from "react";
@@ -19,18 +20,20 @@ import { formatLKT } from "@/pipeline/calendar";
 import { buildRampRisk } from "@/pipeline/system/derive";
 import { LEVEL_CLASS } from "@/pipeline/system/thresholds";
 import type { BessTick, UnitTick } from "@/pipeline/system/types";
-import { cn } from "@/lib/utils";
+import { cn, formatMW } from "@/lib/utils";
 
 /** Memoised: the look-ahead sweep costs ~30 model evaluations, and the fleet
  *  telemetry behind it moves every 15 s — not every second. */
 export const RampPanel = memo(function RampPanel({
   now,
   units,
+  feederId,
 }: {
   now: number;
   units: (UnitTick | BessTick)[];
+  feederId: string;
 }) {
-  const risk = useMemo(() => buildRampRisk(now, units), [now, units]);
+  const risk = useMemo(() => buildRampRisk(now, units, feederId), [now, units, feederId]);
   const required = Math.abs(risk.requiredMWPerMin);
   const usedPct = risk.capabilityMWPerMin > 0 ? (100 * required) / risk.capabilityMWPerMin : 0;
   const falling = risk.requiredMWPerMin < 0;
@@ -42,18 +45,18 @@ export const RampPanel = memo(function RampPanel({
       <div className="grid grid-cols-2 gap-4">
         <StatTile
           label="Required"
-          help="Steepest net-demand ramp forecast over the next four hours. Net demand is demand minus solar — the part the dispatchable fleet has to follow."
-          value={`${falling ? "−" : "+"}${required.toFixed(1)}`}
+          help="Steepest net-demand ramp forecast over the next four hours. Net demand is feeder demand minus rooftop PV — the part the battery and the primary infeed have to follow."
+          value={`${falling ? "−" : "+"}${formatMW(required)}`}
           unit="MW/min"
           level={risk.status}
           footnote={`${falling ? "Falling" : "Rising"} at ${formatLKT(risk.at, { time: true })}`}
         />
         <StatTile
           label="Can follow"
-          help="Sustained ramp the conventional fleet and storage can deliver together. Storage answers instantly, so its full available power counts."
-          value={risk.capabilityMWPerMin.toFixed(1)}
+          help="Sustained ramp the feeder's DER and the primary infeed can deliver together. Storage is inverter-coupled and answers instantly, so its full available power counts."
+          value={formatMW(risk.capabilityMWPerMin)}
           unit="MW/min"
-          footnote="Conventional + storage"
+          footnote="Infeed + storage"
         />
       </div>
 
@@ -77,8 +80,8 @@ export const RampPanel = memo(function RampPanel({
           label={`Ramp capability used, ${usedPct.toFixed(0)} percent`}
         />
         <p className="text-[11px] text-muted-foreground">
-          The sun setting into the evening peak is the binding case, and more solar
-          makes it steeper.
+          The sun setting into the domestic evening peak is the binding case, and
+          more rooftop PV makes it steeper.
         </p>
       </div>
     </Card>

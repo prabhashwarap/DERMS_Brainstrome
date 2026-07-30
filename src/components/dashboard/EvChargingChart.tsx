@@ -3,7 +3,6 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
-  Line,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip as RTooltip,
@@ -13,22 +12,23 @@ import {
 import { Card } from "@/components/ui/card";
 import { PanelHeader } from "./tiles";
 import { LKT_OFFSET_MIN, formatLKT } from "@/pipeline/calendar";
-import { evShape } from "@/pipeline/der";
+import { evChargerCount, evConnectedMW } from "@/pipeline/system/fleet";
 import type { StackRow } from "@/lib/useBalance";
-import { cn, formatMW } from "@/lib/utils";
-import type { SystemTick } from "@/pipeline/system/types";
+import { cn, formatMW, formatSignedMW } from "@/lib/utils";
+import type { FeederModel, SystemTick } from "@/pipeline/system/types";
 
-const EV_UNMANAGED_COLOR = "#a78bfa";
-const EV_MANAGED_COLOR = "#8b5cf6"; // Violet / Purple for DERMS Smart EV Charging
+const EV_MANAGED_COLOR = "var(--src-battery)"; // DERMS smart EV charging
 
 export const EvChargingChart = memo(function EvChargingChart({
   rows,
   now,
   tick,
+  feeder,
 }: {
   rows: StackRow[];
   now: number;
   tick: SystemTick;
+  feeder: FeederModel;
 }) {
   const ticks = useMemo(() => {
     if (!rows.length) return [];
@@ -43,53 +43,52 @@ export const EvChargingChart = memo(function EvChargingChart({
     return out;
   }, [rows]);
 
+  // EV load comes off the tick rather than being recomputed here. It is part of
+  // the feeder's demand in the model, so a second copy of the shape would let
+  // this chart and the supply stack disagree about the same instant.
   const chartData = useMemo(() => {
     return rows.map((r) => {
       const isPastOrNow = r.load !== undefined;
       const isFutureOrNow = r.loadForecast !== undefined;
 
-      // Base EV load in MW across system
-      const evRatio = evShape(r.ts, "residential");
-      const unmanagedMW = Math.round(145 * evRatio * 10) / 10;
-
-      // DERMS Smart V1G Charging shifts non-essential load to midday solar peak (11:00-14:00) and shaves evening peak (18:30-21:00)
-      const hour = new Date(r.ts).getUTCHours(); // decimal hour approximation
-      const solarShiftFactor = hour >= 10 && hour <= 14 ? 1.45 : hour >= 18 && hour <= 21 ? 0.72 : 1.0;
-      const managedMW = Math.round(unmanagedMW * solarShiftFactor * 10) / 10;
-
       return {
         ts: r.ts,
-        ev: isPastOrNow ? managedMW : undefined,
-        evForecast: isFutureOrNow ? managedMW : undefined,
-        unmanaged: isPastOrNow ? unmanagedMW : undefined,
-        unmanagedForecast: isFutureOrNow ? unmanagedMW : undefined,
-        managedVal: managedMW,
-        unmanagedVal: unmanagedMW,
+        ev: isPastOrNow ? r.ev : undefined,
+        evForecast: isFutureOrNow ? r.ev : undefined,
+        managedVal: r.ev,
+        unmanagedVal: r.evUnmanaged,
       };
     });
   }, [rows]);
 
-  const liveEvMW = Math.round(145 * evShape(tick.ts, "residential") * 10) / 10;
-  const hourNow = new Date(tick.ts).getUTCHours();
-  const flexShiftMW = hourNow >= 10 && hourNow <= 14 ? 24.5 : hourNow >= 18 && hourNow <= 21 ? -18.2 : 0;
+  const liveEvMW = tick.evMW;
+  const flexShiftMW = tick.evMW - tick.evUnmanagedMW;
 
   return (
     <Card className="flex flex-col gap-3 p-5">
-      <PanelHeader title="EV Fleet & Smart Charging" note="14,250 active EV chargers · 24 h metered & 24 h forecast" />
+      <PanelHeader
+        title="EV charging"
+        note={`${evChargerCount(feeder.ev)} chargers, ${evConnectedMW(feeder.ev).toFixed(
+          1
+        )} MW connected · ${feeder.ev.domesticChargers} enrolled for V1G`}
+      />
 
-      <div className="flex items-baseline gap-4">
+      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
         <div>
-          <span className="tnum text-xl font-semibold leading-none text-[#8b5cf6]">
+          <span className="tnum text-xl font-semibold leading-none text-[var(--src-battery)]">
             {formatMW(liveEvMW)}
           </span>
-          <span className="ml-1 text-xs text-muted-foreground">EV Load MW</span>
+          <span className="ml-1 text-xs text-muted-foreground">MW charging</span>
         </div>
-        {Math.abs(flexShiftMW) > 0.5 && (
+        {/* 20 kW: smaller than three chargers, so not a shift worth reporting. */}
+        {Math.abs(flexShiftMW) > 0.02 && (
           <>
             <div className="h-4 w-px bg-border" aria-hidden />
             <div>
-              <span className="tnum text-sm font-semibold leading-none text-emerald-500">
-                {flexShiftMW > 0 ? `+${flexShiftMW.toFixed(1)} MW solar soak` : `${flexShiftMW.toFixed(1)} MW peak shaved`}
+              <span className="tnum text-sm font-semibold leading-none text-[var(--status-normal)]">
+                {flexShiftMW > 0
+                  ? `+${formatMW(flexShiftMW)} MW soaking PV`
+                  : `${formatMW(flexShiftMW)} MW off the peak`}
               </span>
             </div>
           </>
@@ -137,27 +136,6 @@ export const EvChargingChart = memo(function EvChargingChart({
               stroke={EV_MANAGED_COLOR}
               strokeDasharray="4 4"
               strokeWidth={1.8}
-              isAnimationActive={false}
-              connectNulls={false}
-            />
-            <Line
-              type="monotone"
-              dataKey="unmanaged"
-              stroke={EV_UNMANAGED_COLOR}
-              strokeDasharray="3 3"
-              strokeWidth={1.8}
-              dot={false}
-              isAnimationActive={false}
-              connectNulls={false}
-            />
-            <Line
-              type="monotone"
-              dataKey="unmanagedForecast"
-              stroke={EV_UNMANAGED_COLOR}
-              strokeDasharray="2 4"
-              strokeWidth={1.5}
-              strokeOpacity={0.6}
-              dot={false}
               isAnimationActive={false}
               connectNulls={false}
             />
@@ -212,17 +190,19 @@ function EvTooltip({
       <table className="tnum w-full">
         <tbody>
           <tr>
-            <td className="pr-3 text-muted-foreground">Smart V1G Load</td>
-            <td className="text-right font-medium text-[#8b5cf6]">{formatMW(managed)}</td>
+            <td className="pr-3 text-muted-foreground">Smart V1G load</td>
+            <td className="text-right font-medium text-[var(--src-battery)]">
+              {formatMW(managed)} MW
+            </td>
           </tr>
           <tr>
-            <td className="pr-3 text-muted-foreground">Unmanaged Baseline</td>
-            <td className="text-right font-medium text-muted-foreground">{formatMW(unmanaged)}</td>
+            <td className="pr-3 text-[11px] text-muted-foreground">If uncontrolled</td>
+            <td className="text-right text-[11px] font-medium">{formatMW(unmanaged)} MW</td>
           </tr>
           <tr className="border-t border-border">
-            <td className="pr-3 pt-1 text-[11px] font-medium">Flex Shift</td>
-            <td className="pt-1 text-right text-[11px] font-medium text-emerald-500">
-              {delta >= 0 ? `+${delta.toFixed(1)} MW` : `${delta.toFixed(1)} MW`}
+            <td className="pr-3 pt-1 text-[11px] font-medium">Flex shift</td>
+            <td className="pt-1 text-right text-[11px] font-medium text-[var(--status-normal)]">
+              {formatSignedMW(delta)} MW
             </td>
           </tr>
         </tbody>

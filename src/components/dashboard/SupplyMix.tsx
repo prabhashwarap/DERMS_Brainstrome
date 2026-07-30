@@ -3,14 +3,16 @@
  *
  * The panel every operator dashboard carries beside the stack, because the stack
  * answers "how did we get here" and this answers "what is serving demand at this
- * instant". One 100 % bar, then the same four categories as a table with MW and
+ * instant". One 100 % bar, then the same three categories as a table with MW and
  * share — the bar for the proportion, the table because a proportion nobody can
  * read a number off is only half the fact.
  *
- * Storage and the tie-line are signed. A charging battery and an export are both
- * *negative supply*, and rolling them into the bar as though they were serving
- * demand would misreport the mix; they are listed with their sign and excluded
- * from the bar instead.
+ * Grid and storage are signed. When rooftop PV exceeds local demand the
+ * infeed reverses and the battery charges, and both are *negative supply*;
+ * rolling them into the bar as though they were serving demand would misreport
+ * the mix, so they are listed with their sign and excluded from the bar instead.
+ * How often that happens is exactly what distinguishes the feeders in the
+ * register from each other.
  */
 
 import { Card } from "@/components/ui/card";
@@ -22,7 +24,8 @@ import { cn, formatMW, formatSignedMW } from "@/lib/utils";
 
 /** Why a category is negative — the one thing a signed MW figure cannot say. */
 const NEGATIVE_NOTE: Partial<Record<SourceId, string>> = {
-  other: "export/charging",
+  battery: "charging",
+  grid: "back-feed to primary",
 };
 
 /**
@@ -62,7 +65,8 @@ export function SupplyMix({ tick }: { tick: SystemTick }) {
           {SOURCE_ORDER.map((id) => {
             const mw = tick.bySource[id];
             const pct = served > 0 ? (100 * Math.max(0, mw)) / served : 0;
-            const negative = mw < -0.5;
+            // 20 kW: below that the sign is measurement noise, not a direction.
+            const negative = mw < -0.02;
             return (
               <tr key={id} className="border-b border-border last:border-0">
                 <td className="py-1.5">
@@ -81,7 +85,7 @@ export function SupplyMix({ tick }: { tick: SystemTick }) {
                   </span>
                 </td>
                 <td className="tnum py-1.5 text-right font-medium">
-                  {negative ? formatSignedMW(mw) : formatMW(mw)}
+                  {negative ? formatSignedMW(mw) : formatMW(mw)} MW
                 </td>
                 <td
                   className={cn(

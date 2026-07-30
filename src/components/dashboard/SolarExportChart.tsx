@@ -3,7 +3,6 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
-  Line,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip as RTooltip,
@@ -15,19 +14,21 @@ import { PanelHeader } from "./tiles";
 import { LKT_OFFSET_MIN, formatLKT } from "@/pipeline/calendar";
 import type { StackRow } from "@/lib/useBalance";
 import { cn, formatMW } from "@/lib/utils";
-import type { SystemTick } from "@/pipeline/system/types";
+import { dispatchableSolarMW, installedSolarMW } from "@/pipeline/system/fleet";
+import type { FeederModel, SystemTick } from "@/pipeline/system/types";
 
 const SOLAR_COLOR = "var(--src-solar)";
-const EXPORT_COLOR = "#06b6d4";
 
 export const SolarExportChart = memo(function SolarExportChart({
   rows,
   now,
   tick,
+  feeder,
 }: {
   rows: StackRow[];
   now: number;
   tick: SystemTick;
+  feeder: FeederModel;
 }) {
   const ticks = useMemo(() => {
     if (!rows.length) return [];
@@ -50,40 +51,37 @@ export const SolarExportChart = memo(function SolarExportChart({
       const isPastOrNow = r.load !== undefined;
       const isFutureOrNow = r.loadForecast !== undefined;
 
-      const demandVal = r.load ?? r.loadForecast ?? 1000;
-      // Grid back-feed export occurs during midday peak when solar output exceeds local daytime baseload
-      const exportVal = Math.round(Math.max(0, solar - demandVal * 0.45) * 10) / 10;
-
       return {
         ts: r.ts,
         solar: isPastOrNow ? solar : undefined,
         solarForecast: isFutureOrNow ? solar : undefined,
-        export: isPastOrNow ? exportVal : undefined,
-        exportForecast: isFutureOrNow ? exportVal : undefined,
         solarVal: solar,
         solarPotentialVal: solarPotential,
         curtailedVal: curtailed,
-        exportVal,
       };
     });
   }, [rows]);
 
   const liveSolarMW = tick.solarMW;
-  const liveDemandMW = tick.loadMW;
-  const liveExportMW = Math.max(0, liveSolarMW - liveDemandMW * 0.45);
   const liveCurtailedMW = tick.curtailedMW;
+  const installedMW = installedSolarMW(feeder);
+  // How much of the fleet would actually answer a curtailment instruction. The
+  // rest is legacy net metering, and saying so on the panel is the difference
+  // between a controllable resource and a hopeful one.
+  const controllableMW = dispatchableSolarMW(feeder);
 
   return (
     <Card className="flex flex-col gap-3 p-5">
-      <PanelHeader title="Solar & Grid Export" note="Solar generation vs back-feed export · 24 h metered & 24 h forecast · MW">
+      <PanelHeader
+        title="Rooftop PV"
+        note={`${installedMW.toFixed(2)} MW · ${controllableMW.toFixed(
+          2
+        )} MW controllable · 24 h metered & forecast`}
+      >
         <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
           <span className="flex items-center gap-1.5">
             <span className="h-2.5 w-2.5 rounded-full" style={{ background: SOLAR_COLOR }} />
-            <span>Solar</span>
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full" style={{ background: EXPORT_COLOR }} />
-            <span>Grid Export</span>
+            <span>PV</span>
           </span>
         </div>
       </PanelHeader>
@@ -93,23 +91,17 @@ export const SolarExportChart = memo(function SolarExportChart({
           <span className="tnum text-xl font-semibold leading-none text-foreground">
             {formatMW(liveSolarMW)}
           </span>
-          <span className="ml-1 text-xs text-muted-foreground">Solar MW</span>
+          <span className="ml-1 text-xs text-muted-foreground">MW generating</span>
         </div>
-        <div className="h-4 w-px bg-border" aria-hidden />
-        <div>
-          <span className="tnum text-xl font-semibold leading-none text-[#06b6d4]">
-            {formatMW(liveExportMW)}
-          </span>
-          <span className="ml-1 text-xs text-muted-foreground">Export MW</span>
-        </div>
-        {liveCurtailedMW > 0.5 && (
+        {/* 30 kW: below that the volt-watt response is doing nothing worth a tile. */}
+        {liveCurtailedMW > 0.03 && (
           <>
             <div className="h-4 w-px bg-border" aria-hidden />
             <div>
               <span className="tnum text-xl font-semibold leading-none text-[var(--status-warning)]">
                 {formatMW(liveCurtailedMW)}
               </span>
-              <span className="ml-1 text-xs text-muted-foreground">Spilled MW</span>
+              <span className="ml-1 text-xs text-muted-foreground">MW curtailed</span>
             </div>
           </>
         )}
@@ -159,25 +151,6 @@ export const SolarExportChart = memo(function SolarExportChart({
               isAnimationActive={false}
               connectNulls={false}
             />
-            <Line
-              type="monotone"
-              dataKey="export"
-              stroke={EXPORT_COLOR}
-              strokeWidth={2}
-              dot={false}
-              isAnimationActive={false}
-              connectNulls={false}
-            />
-            <Line
-              type="monotone"
-              dataKey="exportForecast"
-              stroke={EXPORT_COLOR}
-              strokeDasharray="4 4"
-              strokeWidth={1.8}
-              dot={false}
-              isAnimationActive={false}
-              connectNulls={false}
-            />
             <ReferenceLine x={now} stroke="var(--viz-divider)" strokeDasharray="3 3" />
             <RTooltip content={<SolarExportTooltip now={now} />} cursor={{ stroke: "var(--viz-divider)" }} />
           </AreaChart>
@@ -192,7 +165,6 @@ interface TooltipPayload {
     ts: number;
     solarVal: number;
     curtailedVal: number;
-    exportVal: number;
   };
 }
 
@@ -227,19 +199,17 @@ function SolarExportTooltip({
       <table className="tnum w-full">
         <tbody>
           <tr>
-            <td className="pr-3 text-muted-foreground">Solar Gen</td>
-            <td className="text-right font-medium">{formatMW(rowData?.solarVal ?? 0)}</td>
+            <td className="pr-3 text-muted-foreground">PV generation</td>
+            <td className="text-right font-medium">{formatMW(rowData?.solarVal ?? 0)} MW</td>
           </tr>
-          {rowData?.curtailedVal > 0.1 && (
+          {rowData?.curtailedVal > 0.03 && (
             <tr>
-              <td className="pr-3 text-muted-foreground">Spilled Solar</td>
-              <td className="text-right font-medium text-[var(--status-warning)]">{formatMW(rowData.curtailedVal)}</td>
+              <td className="pr-3 text-muted-foreground">Volt-watt curtailed</td>
+              <td className="text-right font-medium text-[var(--status-warning)]">
+                {formatMW(rowData.curtailedVal)} MW
+              </td>
             </tr>
           )}
-          <tr>
-            <td className="pr-3 text-muted-foreground">Grid Export</td>
-            <td className="text-right font-medium text-[#06b6d4]">{formatMW(rowData?.exportVal ?? 0)}</td>
-          </tr>
         </tbody>
       </table>
     </div>

@@ -1,6 +1,6 @@
 # Code Map (graphify)
 
-_53 files · 174 exported symbols · regenerate with `npm run graphify`._
+_53 files · 187 exported symbols · regenerate with `npm run graphify`._
 
 Read this map to locate code, then open only the file(s) you need. Signatures are compact (params + annotated return type); tags like `[memo]` note wrappers.
 
@@ -54,13 +54,13 @@ Read this map to locate code, then open only the file(s) you need. Signatures ar
 - AlarmDrawer()
 
 ## src/components/dashboard/BatteryStorageChart.tsx
-- BatteryStorageChart({ rows, now, tick, }: { rows: StackRow[]; now: number; tick: SystemTick; })  [memo]
+- BatteryStorageChart({ rows, now, tick, feeder, }: { rows: StackRow[]; now: number; tick: SystemTick; feeder: FeederModel; })  [memo]
 
 ## src/components/dashboard/DashboardView.tsx
-- DashboardView({ bundle, feederId, onFeederChange, }: { bundle: Bundle; feederId: FeederId; onFeederChange: (id: FeederId) => void; })
+- DashboardView({ feederId, onFeederChange, }: { feederId: string; onFeederChange: (id: string) => void; })
 
 ## src/components/dashboard/EvChargingChart.tsx
-- EvChargingChart({ rows, now, tick, }: { rows: StackRow[]; now: number; tick: SystemTick; })  [memo]
+- EvChargingChart({ rows, now, tick, feeder, }: { rows: StackRow[]; now: number; tick: SystemTick; feeder: FeederModel; })  [memo]
 
 ## src/components/dashboard/EventsPanel.tsx
 - EventsPanel()
@@ -69,13 +69,13 @@ Read this map to locate code, then open only the file(s) you need. Signatures ar
 - FrequencyPanel({ tick, trace, }: { tick: SystemTick; trace: { ts: number; frequencyHz: number }[]; })
 
 ## src/components/dashboard/RampPanel.tsx
-- RampPanel({ now, units, }: { now: number; units: (UnitTick | BessTick)[]; })  [memo]
+- RampPanel({ now, units, feederId, }: { now: number; units: (UnitTick | BessTick)[]; feederId: string; })  [memo]
 
 ## src/components/dashboard/SolarExportChart.tsx
-- SolarExportChart({ rows, now, tick, }: { rows: StackRow[]; now: number; tick: SystemTick; })  [memo]
+- SolarExportChart({ rows, now, tick, feeder, }: { rows: StackRow[]; now: number; tick: SystemTick; feeder: FeederModel; })  [memo]
 
 ## src/components/dashboard/SolarToday.tsx
-- SolarToday({ now }: { now: number })  [memo]
+- SolarToday({ now, feeder, }: { now: number; feeder: FeederModel; })  [memo]
 
 ## src/components/dashboard/Sparkline.tsx
 - Sparkline({ values, stroke = "var(--viz-input)", height = 32, width = 96, className, label, }: Props)
@@ -85,7 +85,7 @@ Read this map to locate code, then open only the file(s) you need. Signatures ar
 
 ## src/components/dashboard/SupplyStack.tsx
 - const SOURCE_COLOR
-- SupplyStack({ rows, now, tick, }: { rows: StackRow[]; now: number; tick: SystemTick; })  [memo]
+- SupplyStack({ rows, now, tick, feeder, }: { rows: StackRow[]; now: number; tick: SystemTick; feeder: FeederModel; })  [memo]
 
 ## src/components/dashboard/tiles.tsx
 - Term({ children, help }: { children: React.ReactNode; help: string })
@@ -136,14 +136,14 @@ Read this map to locate code, then open only the file(s) you need. Signatures ar
 - ↳ TooltipProvider
 
 ## src/lib/alarms.tsx
-- AlarmProvider({ children }: { children: ReactNode })
+- AlarmProvider({ feederId, children, }: { feederId: string; children: ReactNode; })
 - fn useAlarms(): AlarmState
 
 ## src/lib/useBalance.ts
-- fn useSystemTick(intervalMs): { tick: SystemTick; trace: { ts: number; frequencyHz: number }[]; }
+- fn useSystemTick(feederId: string, intervalMs): { tick: SystemTick; trace: { ts: number; frequencyHz: number }[]; }
 - interface StackRow
-- fn useStackSeries(intervalMs): { rows: StackRow[]; now: number }
-- fn useFleetTick(intervalMs): { ts: number; units: (UnitTick | BessTick)[]; buses: BusTick[]; }
+- fn useStackSeries(feederId: string, intervalMs): { rows: StackRow[]; now: number }
+- fn useFleetTick(feederId: string, intervalMs): { ts: number; units: (UnitTick | BessTick)[]; buses: BusTick[]; }
 - fn useIsStale(lastTs: number, expectedIntervalMs: number): boolean
 
 ## src/lib/useTheme.ts
@@ -154,6 +154,7 @@ Read this map to locate code, then open only the file(s) you need. Signatures ar
 - fn formatPower(valMW: number): { value: string; unit: string; full: string }
 - fn formatMW(valMW: number): string
 - fn formatSignedMW(valMW: number): string
+- fn formatMWh(valMWh: number): string
 - fn formatEnergy(valMWh: number): { value: string; unit: string; full: string }
 
 ## src/pipeline/calendar.ts
@@ -226,35 +227,44 @@ Read this map to locate code, then open only the file(s) you need. Signatures ar
 
 ## src/pipeline/system/alarms.ts
 - type AlarmCondition
-- fn evaluateAlarms(tick: SystemTick, unitTicks: UnitTick[], busTicks: BusTick[]): AlarmCondition[]
+- fn evaluateAlarms(tick: SystemTick, unitTicks: UnitTick[], busTicks: BusTick[], feederId: string): AlarmCondition[]
 - fn sortAlarms(a: Alarm, b: Alarm)
 
 ## src/pipeline/system/derive.ts
-- fn primaryRequirementMW(demandMW: number)
-- fn reserveCoverPct(ticks: UnitTick[], tick: SystemTick): number
+- fn peakShaveRequirementMW(demandMW: number)
+- fn reserveCoverPct(ticks: UnitTick[], tick: SystemTick, feederId: string): number
 - interface RampRisk
-- fn buildRampRisk(now: number, ticks: UnitTick[], lookAheadHours): RampRisk
-- fn solarDayTotals(from: number, to: number, stepMs)
+- fn buildRampRisk(now: number, ticks: UnitTick[], feederId: string, lookAheadHours): RampRisk
+- fn solarDayTotals(from: number, to: number, feederId: string, stepMs)
+- fn feederDayTotals(from: number, to: number, feederId: string, stepMs)
 
 ## src/pipeline/system/fleet.ts
-- const CONVENTIONAL
-- const BUSES
-- const UNITS
-- UNIT_BY_ID(u)  [fromEntries][map]
-- BUS_BY_ID(b)  [fromEntries][map]
-- fn installedSolarMW(): number
-- fn dispatchableSolarMW(): number
-- fn installedStorageMW(): number
-- fn installedStorageMWh(): number
-- fn largestInfeedMW(): number
+- const NATIONAL_GRID
+- const FEEDER_RAMP_MW_PER_MIN
+- const FEEDER_MODEL_LIST  [map]
+- FEEDER_MODELS(m)  [fromEntries][map]
+- const DEFAULT_FEEDER_ID
+- fn feederModel(id: string): FeederModel
+- fn phaseVoltageKV(f: FeederModel)
+- fn installedSolarMW(f: FeederModel): number
+- fn dispatchableSolarMW(f: FeederModel): number
+- fn installedStorageMW(f: FeederModel): number
+- fn installedStorageMWh(f: FeederModel): number
+- fn hasStorage(f: FeederModel): boolean
+- fn solarPenetrationPct(f: FeederModel): number
+- fn evConnectedMW(ev: EvFleet)
+- fn evChargerCount(ev: EvFleet)
+- fn evEnrolledShare(ev: EvFleet)
+- fn unitById(f: FeederModel, id: string): Unit | undefined
+- fn busById(f: FeederModel, id: string): Bus | undefined
 
 ## src/pipeline/system/source.ts
 - fn socAt(h: number)
-- fn sampleSystemTick(ts: number): SystemTick
-- fn sampleUnitTicks(ts: number): (UnitTick | BessTick)[]
-- fn sampleBusTicks(ts: number): BusTick[]
-- fn sampleSystemSeries(from: number, to: number, stepMs: number): SystemTick[]
-- ↳ SYSTEM_PEAK_MW
+- fn sampleSystemTick(ts: number, feederId: string): SystemTick
+- fn sampleUnitTicks(ts: number, feederId: string): (UnitTick | BessTick)[]
+- fn sampleBusTicks(ts: number, feederId: string): BusTick[]
+- fn sampleSystemSeries(from: number, to: number, stepMs: number, feederId: string): SystemTick[]
+- ↳ MV_VOLTAGE_BAND_PU
 
 ## src/pipeline/system/thresholds.ts
 - type Level
@@ -276,6 +286,9 @@ Read this map to locate code, then open only the file(s) you need. Signatures ar
 - interface Unit
 - interface UnitTick
 - interface BessTick
+- type LoadHump
+- interface EvFleet
+- interface FeederModel
 - interface Bus
 - interface BusTick
 - interface SystemTick

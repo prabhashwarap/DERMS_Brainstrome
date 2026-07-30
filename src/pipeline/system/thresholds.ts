@@ -6,8 +6,10 @@
  * expressed as a deviation from a nominal, because that is what an operator
  * acts on — nobody responds to "49.87 Hz", they respond to "−0.13".
  *
- * Values are indicative for a 50 Hz island system and are the one thing a
- * deployment is expected to retune.
+ * Values are indicative for a Sri Lankan 11 kV feeder on a 50 Hz island system,
+ * and are the one thing a deployment is expected to retune. The voltage bands are
+ * not indicative: ±5 % is the PUCSL distribution licence condition, and it is what
+ * the tail-end node is actually judged against.
  */
 
 export type Level = "normal" | "warning" | "critical";
@@ -19,15 +21,17 @@ export const THRESHOLDS = {
   frequencyHz: { warning: 0.05, critical: 0.15 },
   /** Absolute RoCoF. Sub-0.1 is quiet; above 0.5 the system is losing control. */
   rocofHzPerS: { warning: 0.1, critical: 0.5 },
-  /** Absolute deviation from 1.0 pu. */
-  voltagePu: { warning: 0.05, critical: 0.1 },
-  /** Voltage stability margin, % — lower is worse, so these invert. */
+  /** Absolute deviation from 1.0 pu at a feeder node. Warning is the PUCSL ±5 %
+   *  licence condition for MV supply; critical is where LV customers behind it
+   *  start leaving their own band. */
+  voltagePu: { warning: 0.05, critical: 0.09 },
+  /** Room left inside the ±5 % band, % of the band — lower is worse, so inverted. */
   stabilityMarginPct: { warning: 15, critical: 8 },
-  /** Storage reserve as a share of the primary response requirement, %. Inverted. */
+  /** Storage reserve as a share of the peak-shaving requirement, %. Inverted. */
   reserveCoverPct: { warning: 100, critical: 70 },
-  /** Synchronous inertia, GW·s. Inverted — it falls as solar displaces plant. */
+  /** Synchronous inertia on the CEB system, GW·s. Inverted, and observed only. */
   inertiaGWs: { warning: 2.9, critical: 2.6 },
-  /** Solar curtailed as a share of what was available, %. */
+  /** Rooftop PV curtailed as a share of what was available, %. */
   curtailmentPct: { warning: 15, critical: 35 },
   /** BESS cell temperature, °C. */
   cellTempC: { warning: 38, critical: 45 },

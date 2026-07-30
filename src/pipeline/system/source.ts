@@ -1,37 +1,63 @@
 /**
- * Grid balance — the source.
+ * Feeder balance — the source.
  *
  * `sampleSystemTick` is a *pure function of the timestamp*. Nothing accumulates,
  * so the same instant always yields the same state, history can be reconstructed
  * by sampling backwards, and RoCoF is a genuine derivative of the frequency
  * series rather than a separately invented number.
  *
- * The dispatch order encodes the product's goal: **solar is taken first and
- * spilled last**. Conventional plant fills whatever demand solar and storage
- * leave behind, down to its minimum stable generation and no further — and when
- * that floor is reached, solar is curtailed. That single constraint is what the
- * whole Headroom tab is about.
+ * The dispatch order encodes the product's goal: **rooftop PV is taken first and
+ * curtailed last**. Storage soaks what feeder demand cannot, the primary infeed
+ * carries whatever is left over in either direction, and only when the export
+ * limit is reached does PV get curtailed — and then only the DERMS-enrolled
+ * inverters, because legacy net-metered installations take no instruction. That
+ * single constraint is what the whole dashboard is about.
+ *
+ * Frequency and inertia are the exception to all of the above: they are national
+ * CEB quantities, modelled exogenously and merely observed here. A distribution
+ * feeder of 12 MW does not move the frequency of a 2,500 MW island system, and
+ * deriving one from the other would be a lie the numbers would eventually tell.
+ *
+ * Every sampler takes a feeder id. The feeders in the register are different
+ * networks — different load shape, assets, limits and conductor — so the model is
+ * genuinely re-evaluated per feeder rather than rescaled.
  *
  * For v1 the "source" is a physical toy model, the same posture `ingest.ts`
- * takes for feeder load. When a real SCADA/EMS feed lands, this file is the only
+ * takes for feeder load. When a real AMI/SCADA feed lands, this file is the only
  * one that changes.
  */
 
 import { localParts } from "../calendar";
-import { BUSES, CONVENTIONAL, UNITS } from "./fleet";
+import { evShape } from "../der";
+import {
+  DEFAULT_FEEDER_ID,
+  NATIONAL_GRID,
+  evEnrolledShare,
+  feederModel,
+  hasStorage,
+} from "./fleet";
 import type {
   BessTick,
   BusTick,
+  FeederModel,
   SourceId,
   SystemTick,
   UnitTick,
 } from "./types";
 
-/** System peak demand, MW (Sri Lanka National Peak Demand ~2,500 MW). Scales the whole model. */
-const SYSTEM_PEAK_MW = 2500;
+/**
+ * PV system derate: inverter efficiency, cabling and soiling.
+ *
+ * Applied on top of the temperature derate below, so a clear Colombo noon lands
+ * at ~0.80 of nameplate — which is what a Sri Lankan rooftop fleet delivers.
+ */
+const PV_SYSTEM_DERATE = 0.94;
 
-/** Frequency sensitivity to imbalance, Hz per MW. 20 MW ⇒ the 0.05 Hz warning. */
-const HZ_PER_MW = 0.0025;
+/** Module temperature coefficient of power, per °C above 25 °C. */
+const PV_TEMP_COEFF = 0.0038;
+
+/** Statutory MV voltage band, ± pu. PUCSL distribution licence condition. */
+const MV_VOLTAGE_BAND_PU = 0.05;
 
 /* ------------------------------------------------------------------ */
 /* deterministic smooth noise                                          */
@@ -77,9 +103,11 @@ function weatherAt(ts: number) {
   const h = p.decimalHour;
 
   // Cloud walks slowly; the two monsoons lift the mean. It is the single most
-  // important input in this model — it is what moves solar.
+  // important input in this model — it is what moves PV. A feeder spans a few
+  // kilometres, so cloud edges are partly averaged out — but only partly, which
+  // is why it still walks faster here than across an island.
   const monsoon = 0.16 * bell(p.month, 5.5, 1.3) + 0.2 * bell(p.month, 10.5, 1.4);
-  const cloud = clamp(0.4 + monsoon + 0.3 * noise(ts, 3 * 3600_000, 11), 0.02, 0.98);
+  const cloud = clamp(0.4 + monsoon + 0.3 * noise(ts, 110 * 60_000, 11), 0.02, 0.98);
 
   const seasonMean = 27.4 + 1.9 * Math.cos((2 * Math.PI * (p.dayOfYear - 96)) / 365);
   const diurnal = 3.6 * Math.cos((2 * Math.PI * (h - 14.2)) / 24);
@@ -91,27 +119,69 @@ function weatherAt(ts: number) {
 /* ------------------------------------------------------------------ */
 /* demand                                                             */
 
-function systemLoadMW(ts: number, tempC: number): number {
+/**
+ * Non-EV base demand, MW.
+ *
+ * A distribution feeder is not a national load curve, and the feeders in the
+ * register are not each other's curve either — the humps come from the feeder
+ * record, so an industrial feeder genuinely peaks at one o'clock and a
+ * residential one genuinely peaks after dark. The gap between a residential
+ * evening peak and the midday PV surplus is the entire reason such a feeder needs
+ * storage; on an industrial feeder that gap does not exist, and neither does the
+ * need.
+ *
+ * Weekends move in opposite directions by design: domestic occupancy rises when
+ * people are at home, and an industrial estate shuts.
+ */
+function baseLoadMW(f: FeederModel, ts: number, tempC: number): number {
   const p = localParts(ts);
   const h = p.decimalHour;
 
-  // The national double hump: modest domestic morning, dominant evening peak.
-  // The evening peak lands after sunset, which is the whole reason solar
-  // penetration is hard.
+  const hump = ([amp, mu, sigma]: readonly [number, number, number]) => amp * bell(h, mu, sigma);
   const shape =
-    0.55 + 0.16 * bell(h, 6.8, 1.2) + 0.12 * bell(h, 12.8, 3.0) + 0.42 * bell(h, 19.5, 2.0);
+    f.baseShare + hump(f.morningHump) + hump(f.middayHump) + hump(f.eveningHump);
 
-  const weekday = p.weekday === 0 ? 0.86 : p.weekday === 6 ? 0.95 : 1;
-  const cooling = 1 + 0.02 * Math.max(0, tempC - 26);
-  const jitter = 1 + 0.009 * noise(ts, 12 * 60_000, 21);
+  const weekend = p.weekday === 0 ? f.weekend[0] : p.weekday === 6 ? f.weekend[1] : 1;
+  // Split-unit air conditioning in the Colombo suburbs is real and it is the
+  // reason the peak moves with temperature at all. A commercial way is more
+  // exposed to it than a domestic one.
+  const cooling = 1 + f.coolingCoeff * Math.max(0, tempC - 26);
+  // Thousands of consumers give a lot of diversity, so a feeder trace is close to
+  // smooth — the residual wobble is metering noise, not load.
+  const jitter = 1 + f.jitterAmp * noise(ts, 9 * 60_000, 21 + f.seed);
 
-  return SYSTEM_PEAK_MW * shape * weekday * cooling * jitter;
+  return f.basePeakMW * shape * weekend * cooling * jitter;
+}
+
+/**
+ * EV charging on the feeder, managed and unmanaged, MW.
+ *
+ * The uncontrolled shape is the after-diversity demand of the whole charger
+ * population. DERMS V1G then moves the enrolled domestic units — kerbside and
+ * DC public units are not enrolled and are not touched — soaking the midday PV
+ * surplus and standing down through the evening peak. The enrolled share bounds
+ * how much can be shifted, so the flexibility can never exceed the hardware that
+ * provides it.
+ */
+function evLoadMW(f: FeederModel, ts: number): { managedMW: number; unmanagedMW: number } {
+  const h = localParts(ts).decimalHour;
+  const unmanagedMW = f.ev.diversifiedPeakMW * evShape(ts, f.ev.profile);
+
+  // Solar-soak window and evening-peak stand-down, as fractions of the enrolled
+  // load. A charger deferred out of the peak has to charge somewhere, which is
+  // why the midday gain and the evening reduction are of similar size.
+  const flex = h >= 10 && h <= 14.5 ? 0.42 : h >= 18.5 && h <= 21.5 ? -0.38 : 0;
+
+  return {
+    managedMW: unmanagedMW * (1 + evEnrolledShare(f.ev) * flex),
+    unmanagedMW,
+  };
 }
 
 /* ------------------------------------------------------------------ */
-/* solar and storage                                                   */
+/* rooftop PV and storage                                             */
 
-/** Clear-sky PV shape, normalised to 1 at solar noon. */
+/** Clear-sky PV shape for 6.9° N, normalised to 1 at solar noon. */
 function solarShape(h: number): number {
   if (h <= 6.1 || h >= 18.3) return 0;
   return Math.sin((Math.PI * (h - 6.1)) / 12.2) ** 1.35;
@@ -120,38 +190,36 @@ function solarShape(h: number): number {
 /**
  * State of charge over the day, %.
  *
- * The schedule is built for solar: charge through the middle of the day when
- * solar would otherwise be spilled, discharge into the evening peak after the
- * sun has gone. Battery power is derived from the *slope* of this curve rather
- * than specified separately, so power and energy can never disagree.
- */
-/**
- * State of charge over the day, %.
+ * Tuned to the LECO time-of-use tariff and to what feeder-level storage is
+ * actually for:
+ * - Off-peak window (22:30–05:30): cheap grid charge back up to ~86 %
+ * - Morning peak (05:30–08:00): discharge into the domestic morning ramp
+ * - Late morning (08:00–11:00): draw down to make room for the PV surplus
+ * - Solar soak (11:00–15:30): charge to 96 % on rooftop PV that would otherwise
+ *   push the tail-end node past +5 %
+ * - Pre-peak hold (15:30–18:30): sit high, waiting
+ * - Evening peak (18:30–22:30): peak-shaving discharge to 16 %
  *
- * The schedule is tuned to realistic utility BESS operations:
- * - Off-peak night (00:00-05:00): Gentle grid top-up charge from 35% to 42%
- * - Morning peak (05:00-08:30): Discharge into morning demand ramp (42% to 28%)
- * - Solar soak window (09:30-15:30): High-capacity charging (30% to 96%) to absorb
- *   excess rooftop and utility solar, avoiding feeder voltage violations & curtailment
- * - Pre-peak hold (15:30-17:30): High-SOC hold (96% to 94%) with HVAC cooling active
- * - Evening peak (17:30-21:30): Peak-shaving discharge (94% to 22%) into evening peak
- * - Night reset (21:30-24:00): Moderate recharge from 22% back to 35%
+ * Battery power is derived from the *slope* of this curve rather than specified
+ * separately, so power and energy can never disagree. Every segment stays inside
+ * the unit's power rating — the steepest is the evening discharge, at about
+ * 0.19 C on a two-hour battery.
  */
 const SOC_CURVE: [number, number][] = [
-  [0, 35],
-  [5, 42],
-  [8.5, 28],
-  [9.5, 30],
+  [0, 58],
+  [5, 86],
+  [8, 60],
+  [11, 48],
   [15.5, 96],
-  [17.5, 94],
-  [21.5, 22],
-  [24, 35],
+  [18.5, 93],
+  [22.5, 16],
+  [24, 34],
 ];
 
 export const socAt = (h: number) => piecewise(SOC_CURVE, h);
 
-/** Discharge power implied by the SOC slope & RTE, MW. Positive = discharging, Negative = charging. */
-function batteryPowerMW(h: number, energyMWh: number, rte = 0.88): number {
+/** Discharge power implied by the SOC slope & RTE, MW. Positive = discharging. */
+function batteryPowerMW(h: number, energyMWh: number, rte = 0.9): number {
   const dt = 0.05; // hours
   const hi = Math.min(24, h + dt);
   const lo = Math.max(0, h - dt);
@@ -164,132 +232,180 @@ function batteryPowerMW(h: number, energyMWh: number, rte = 0.88): number {
 }
 
 /* ------------------------------------------------------------------ */
+/* national grid — observed, not derived                               */
+
+/**
+ * CEB system frequency, Hz.
+ *
+ * Exogenous by construction. Sri Lanka is a small island system and its
+ * frequency genuinely wanders further than an interconnected one: excursions
+ * past ±0.05 Hz are routine, past ±0.15 Hz are not. Three noise scales give the
+ * slow drift, the dispatch-interval steps and the second-to-second ripple.
+ */
+function nationalFrequencyHz(ts: number): number {
+  return (
+    50 +
+    0.09 * noise(ts, 11 * 60_000, 71) +
+    0.03 * noise(ts, 45_000, 72) +
+    0.009 * noise(ts, 2_500, 73)
+  );
+}
+
+/**
+ * Synchronous inertia on the CEB system, GW·s.
+ *
+ * Falls through the middle of the day as utility and rooftop solar displace
+ * spinning plant nationally — the reason a distribution operator watches a
+ * transmission quantity at all.
+ */
+function nationalInertiaGWs(ts: number): number {
+  const h = localParts(ts).decimalHour;
+  return (
+    NATIONAL_GRID.inertiaNightGWs -
+    NATIONAL_GRID.inertiaSolarDisplacementGWs * solarShape(h) +
+    0.11 * noise(ts, 20 * 60_000, 77)
+  );
+}
+
+/* ------------------------------------------------------------------ */
 
 interface State {
   ts: number;
   loadMW: number;
-  interchangeMW: number;
+  evMW: number;
+  evUnmanagedMW: number;
   outputs: Record<string, number>;
   curtailPerUnit: Record<string, number>;
   bySource: Record<SourceId, number>;
   generationMW: number;
-  conventionalMW: number;
+  gridImportMW: number;
+  transformerFlowMW: number;
   solarMW: number;
-  /** Solar available before any curtailment, MW. */
+  /** PV available before any curtailment, MW. */
   solarPotentialMW: number;
   curtailedMW: number;
   solarHeadroomMW: number;
+  batteryMW: number;
+  socPct: number;
   imbalanceMW: number;
   frequencyHz: number;
   weather: { tempC: number; cloud: number };
 }
 
-function computeState(ts: number): State {
+function computeState(f: FeederModel, ts: number): State {
   const p = localParts(ts);
   const h = p.decimalHour;
   const weather = weatherAt(ts);
-  const loadMW = systemLoadMW(ts, weather.tempC);
+
+  const ev = evLoadMW(f, ts);
+  const loadMW = baseLoadMW(f, ts, weather.tempC) + ev.managedMW;
 
   const outputs: Record<string, number> = {};
   const curtailPerUnit: Record<string, number> = {};
-  const running = UNITS.filter((u) => u.status === "running");
-  for (const u of UNITS) {
+  const running = f.units.filter((u) => u.status === "running");
+  for (const u of f.units) {
     outputs[u.id] = 0;
     curtailPerUnit[u.id] = 0;
   }
 
-  // 1. Solar is taken first, in full, before anything else is dispatched.
+  // 1. Rooftop PV is taken first, in full, before anything else is dispatched.
   const clearSky = solarShape(h);
+  // Modules run well above ambient in Colombo; the derate is worth about 8 % of
+  // output at the middle of a clear day and is why measured peaks sit below kWp.
+  const cellTempC = weather.tempC + 25 * clearSky;
+  const tempDerate = 1 - PV_TEMP_COEFF * Math.max(0, cellTempC - 25);
   let solarPotentialMW = 0;
   for (const u of running) {
     if (u.kind !== "solar") continue;
-    // Rooftop is spread across the network, so its aggregate sees smoother
-    // cloud than a single farm does.
-    const spread = u.distributed ? 0.55 : 1;
-    const local = 1 + 0.07 * spread * noise(ts, 20 * 60_000, u.id.length + 30);
-    const mw = u.capacityMW * clearSky * (1 - 0.78 * spread * weather.cloud) * local;
+    // Clusters spread over kilometres of feeder, so cloud edges are partly
+    // averaged out — but only partly, which is why the local term is still large
+    // next to what a national model would use.
+    const spread = u.distributed ? 0.9 : 1;
+    const local = 1 + 0.1 * spread * noise(ts, 9 * 60_000, u.id.length + 30 + f.seed);
+    const mw =
+      u.capacityMW *
+      clearSky *
+      (1 - 0.78 * spread * weather.cloud) *
+      tempDerate *
+      PV_SYSTEM_DERATE *
+      local;
     outputs[u.id] = Math.max(0, mw);
     solarPotentialMW += outputs[u.id];
   }
 
-  // 2. Storage follows its solar-shaped schedule & RTE efficiency bounds.
+  // 2. Storage follows its tariff- and solar-shaped schedule, within RTE bounds.
   let batteryMW = 0;
   for (const u of running) {
     if (u.kind !== "battery") continue;
-    const rte = u.id === "colombo_bess" ? 0.885 : 0.868;
-    const mw = clamp(batteryPowerMW(h, u.energyMWh ?? 0, rte), -u.capacityMW, u.capacityMW);
+    const mw = clamp(batteryPowerMW(h, u.energyMWh ?? 0, 0.9), -u.capacityMW, u.capacityMW);
     outputs[u.id] = mw;
     batteryMW += mw;
   }
 
-  // 3. Scheduled tie-line flow, load-following so the tie is never exporting
-  //    hard into the evening peak.
-  const loadNorm = loadMW / SYSTEM_PEAK_MW;
-  const interchangeMW = clamp(
-    30 + 90 * noise(ts, 75 * 60_000, 55) + 150 * (loadNorm - 0.72),
-    -100,
-    220
-  );
-
-  // 4. Load-following AGC tracking maintains perfect supply-demand balance.
-  const demand = loadMW;
-
-  // 5. The minimum-generation constraint, and the curtailment it forces.
+  // 3. The export limit, and the curtailment it forces.
   //
-  //    Room for solar is whatever demand is left once must-run plant is at its
-  //    floor and storage and the tie have taken their share. When solar exceeds
-  //    that room it is spilled — and only *dispatchable* solar can be spilled,
-  //    because rooftop PV sits behind the meter and takes no instruction. That
-  //    asymmetry is the hard part of the penetration problem, so the model
+  //    Room for PV is feeder demand plus whatever the network can push back up to
+  //    the primary before the reverse-power setting binds, less whatever storage
+  //    is already taking. When PV exceeds that room it is curtailed by volt-watt
+  //    response — and only the *DERMS-enrolled* inverters respond, because legacy
+  //    net-metered installations sit behind the meter and take no instruction.
+  //    That asymmetry is the hard part of the penetration problem, so the model
   //    keeps it rather than smoothing it away.
-  const roomForSolarMW = demand - CONVENTIONAL.floorMW - batteryMW - interchangeMW;
+  const exportLimitMW = f.exportLimitMW;
+  const roomForSolarMW = loadMW + exportLimitMW - batteryMW;
   const solarHeadroomMW = roomForSolarMW - solarPotentialMW;
 
   let solarMW = solarPotentialMW;
   let curtailedMW = 0;
   if (solarHeadroomMW < 0) {
-    const dispatchable = running.filter((u) => u.kind === "solar" && !u.distributed);
-    const spillable = dispatchable.reduce((a, u) => a + outputs[u.id], 0);
+    const controllable = running.filter((u) => u.kind === "solar" && !u.distributed);
+    const spillable = controllable.reduce((a, u) => a + outputs[u.id], 0);
     curtailedMW = Math.min(-solarHeadroomMW, spillable);
     const factor = spillable > 0 ? (spillable - curtailedMW) / spillable : 1;
-    for (const u of dispatchable) {
+    for (const u of controllable) {
       curtailPerUnit[u.id] = outputs[u.id] * (1 - factor);
       outputs[u.id] *= factor;
     }
     solarMW = solarPotentialMW - curtailedMW;
   }
 
-  // 6. Conventional plant fills what is left, bounded by its floor and cap.
-  const conventionalMW = clamp(
-    demand - solarMW - batteryMW - interchangeMW,
-    CONVENTIONAL.floorMW,
-    CONVENTIONAL.capMW
-  );
+  // 4. The primary infeed carries the residual, in whichever direction it falls.
+  //    Unlike a generator it has no minimum output: it follows demand exactly,
+  //    down through zero and into export up to the primary substation.
+  const transformerFlowMW = clamp(loadMW - solarMW - batteryMW, -exportLimitMW, f.firmMW);
 
-  const generationMW = conventionalMW + solarMW + batteryMW;
-  const imbalanceMW = generationMW + interchangeMW - loadMW;
-
-  const frequencyHz =
-    50 + HZ_PER_MW * imbalanceMW + 0.012 * noise(ts, 5_000, 71) + 0.006 * noise(ts, 1_400, 72);
+  const generationMW = solarMW + Math.max(0, batteryMW);
+  const imbalanceMW = solarMW + batteryMW + transformerFlowMW - loadMW;
 
   return {
     ts,
     loadMW,
-    interchangeMW,
+    evMW: ev.managedMW,
+    evUnmanagedMW: ev.unmanagedMW,
     outputs,
     curtailPerUnit,
     bySource: {
-      other: conventionalMW + batteryMW + interchangeMW,
+      // The three terms sum to demand exactly, so the stack and the demand line
+      // on the chart cannot disagree. Storage is signed and stays its own term:
+      // a battery charging on the midday surplus is negative supply, and folding
+      // it into the grid term would cancel both to nothing.
       solar: solarMW,
+      battery: batteryMW,
+      grid: transformerFlowMW,
     },
     generationMW,
-    conventionalMW,
+    gridImportMW: Math.max(0, transformerFlowMW),
+    transformerFlowMW,
     solarMW,
     solarPotentialMW,
     curtailedMW,
     solarHeadroomMW,
+    batteryMW,
+    // A feeder with no storage has no state of charge. Reporting the schedule
+    // anyway would put a plausible number on a cabinet that does not exist.
+    socPct: hasStorage(f) ? socAt(h) : 0,
     imbalanceMW,
-    frequencyHz,
+    frequencyHz: nationalFrequencyHz(ts),
     weather,
   };
 }
@@ -297,58 +413,65 @@ function computeState(ts: number): State {
 /* ------------------------------------------------------------------ */
 /* public sampling                                                     */
 
-/** Synchronous inertia, which falls as conventional plant backs off for solar. */
-function inertiaGWs(conventionalMW: number): number {
-  return (
-    CONVENTIONAL.inertiaAtFloorGWs +
-    Math.max(0, conventionalMW - CONVENTIONAL.floorMW) * CONVENTIONAL.inertiaPerMWGWs
-  );
-}
-
-/** The system tick. RoCoF is differentiated from the frequency one second back. */
-export function sampleSystemTick(ts: number): SystemTick {
-  const now = computeState(ts);
-  const prev = computeState(ts - 1000);
+/**
+ * The feeder tick. RoCoF is differentiated from the frequency one second back.
+ *
+ * `feederId` defaults so that a caller who has not yet chosen still gets a valid
+ * feeder rather than a crash, but every caller on the dashboard passes one — the
+ * selector would be decoration otherwise.
+ */
+export function sampleSystemTick(ts: number, feederId: string = DEFAULT_FEEDER_ID): SystemTick {
+  const f = feederModel(feederId);
+  const now = computeState(f, ts);
 
   return {
     ts,
     frequencyHz: now.frequencyHz,
-    rocofHzPerS: now.frequencyHz - prev.frequencyHz,
+    rocofHzPerS: now.frequencyHz - nationalFrequencyHz(ts - 1000),
     generationMW: now.generationMW,
     loadMW: now.loadMW,
-    interchangeMW: now.interchangeMW,
+    transformerFlowMW: now.transformerFlowMW,
+    transformerLoadingPct: (100 * Math.abs(now.transformerFlowMW)) / f.firmMW,
     imbalanceMW: now.imbalanceMW,
-    inertiaGWs: inertiaGWs(now.conventionalMW),
+    inertiaGWs: nationalInertiaGWs(ts),
     solarMW: now.solarMW,
     curtailedMW: now.curtailedMW,
     solarHeadroomMW: now.solarHeadroomMW,
-    conventionalMW: now.conventionalMW,
-    conventionalFloorMW: CONVENTIONAL.floorMW,
-    batteryMW: now.outputs["colombo_bess"] + now.outputs["kotte_bess"],
+    gridImportMW: now.gridImportMW,
+    gridExportLimitMW: f.exportLimitMW,
+    batteryMW: now.batteryMW,
+    socPct: now.socPct,
+    evMW: now.evMW,
+    evUnmanagedMW: now.evUnmanagedMW,
     bySource: now.bySource,
     weather: now.weather,
-  } as SystemTick;
+  };
 }
 
-/** Per-unit telemetry, batteries included (narrowed at the call site). */
-export function sampleUnitTicks(ts: number): (UnitTick | BessTick)[] {
-  const state = computeState(ts);
+/** Per-unit telemetry, the battery included (narrowed at the call site). */
+export function sampleUnitTicks(
+  ts: number,
+  feederId: string = DEFAULT_FEEDER_ID
+): (UnitTick | BessTick)[] {
+  const f = feederModel(feederId);
+  const state = computeState(f, ts);
   const h = localParts(ts).decimalHour;
 
-  return UNITS.map((u): UnitTick | BessTick => {
+  return f.units.map((u): UnitTick | BessTick => {
     const outputMW = state.outputs[u.id] ?? 0;
     const offline = u.status !== "running";
     const curtailedMW = state.curtailPerUnit[u.id] ?? 0;
 
     if (u.kind === "solar") {
-      // A solar farm's headroom is what the resource would give if the grid
-      // would take it — which at night is nothing, and at noon is whatever is
-      // being spilled.
+      // A PV cluster's headroom is what the resource would give if the network
+      // would take it — at night nothing, at noon whatever is being curtailed.
       return {
         unitId: u.id,
         ts,
         outputMW,
-        reactiveMVAr: offline ? 0 : outputMW * 0.04,
+        // Rooftop inverters run near unity power factor unless volt-var is
+        // active, which on this feeder it is not.
+        reactiveMVAr: offline ? 0 : outputMW * 0.02,
         availableUpMW: offline ? 0 : curtailedMW,
         availableDownMW: offline || u.distributed ? 0 : outputMW,
         curtailedMW,
@@ -356,23 +479,36 @@ export function sampleUnitTicks(ts: number): (UnitTick | BessTick)[] {
       };
     }
 
-    const rte = u.id === "colombo_bess" ? 0.885 : 0.868;
-    const sohPct = u.id === "colombo_bess" ? 94.8 : 91.5;
-    const usableEnergyMWh = Math.round((u.energyMWh ?? 0) * (sohPct / 100) * 10) / 10;
+    const rte = 0.9;
+    // A 2023-commissioned LFP unit, lightly cycled: capacity fade is small.
+    const sohPct = 96.4;
+    const usableEnergyMWh = (u.energyMWh ?? 0) * (sohPct / 100);
     const socPct = Math.round(socAt(h) * 10) / 10;
 
-    // Autonomous Fast Frequency Response (FFR) droop correction (+/- ~0.5 MW during frequency deviation)
+    // Autonomous droop response to national frequency: a 0.05 Hz deadband, then
+    // a standard 4 % droop — full rated power would need a 2 Hz deviation, which
+    // is why the answer is always a small fraction of the rating. A 4 MW unit can
+    // only ever contribute a few hundred kW to a 2,500 MW system, and saying so is
+    // the point: it is a real service at distribution scale, not a
+    // transmission-sized one.
     const freqDev = state.frequencyHz - 50.0;
-    const droopMW = Math.abs(freqDev) > 0.01 ? clamp(-12 * (u.capacityMW / 60) * freqDev, -5, 5) : 0;
-    const netOutputMW = Math.round((outputMW + droopMW) * 10) / 10;
+    const deadbandHz = 0.05;
+    const droopMW =
+      Math.abs(freqDev) > deadbandHz
+        ? (-u.capacityMW * (freqDev - Math.sign(freqDev) * deadbandHz)) / (0.04 * 50)
+        : 0;
+    const netOutputMW = clamp(outputMW + droopMW, -u.capacityMW, u.capacityMW);
 
-    // Calculate C-rate (active power / nominal MWh capacity)
+    // C-rate against rated energy — the number that says whether the duty is
+    // gentle. This schedule never exceeds about 0.2 C.
     const cRate = Math.round((Math.abs(netOutputMW) / (u.energyMWh ?? 1)) * 100) / 100;
 
-    // Thermal physics with liquid-chilled HVAC stage response
+    // Thermal physics with the unit's own chiller responding in stages. A
+    // container in Colombo sits in 27–33 °C ambient all year, so the HVAC is the
+    // thing keeping the cells alive.
     const ambC = state.weather.tempC;
-    const jHeating = 14 * Math.pow(Math.abs(netOutputMW) / u.capacityMW, 1.35);
-    const rawTemp = ambC + jHeating + 1.2 * noise(ts, 25 * 60_000, u.id.length + 80);
+    const jHeating = 9 * Math.pow(Math.abs(netOutputMW) / u.capacityMW, 1.35);
+    const rawTemp = ambC + jHeating + 1.2 * noise(ts, 25 * 60_000, u.id.length + 80 + f.seed);
 
     let cellTempC = rawTemp;
     let hvacStatus: "Off" | "Stage 1 (Eco)" | "Stage 2 (Max)" = "Off";
@@ -388,11 +524,14 @@ export function sampleUnitTicks(ts: number): (UnitTick | BessTick)[] {
     }
     cellTempC = Math.round(cellTempC * 10) / 10;
 
-    // Operational mode classification
+    // Dead band scaled to the unit rather than fixed: 4 % of rating is a real
+    // standby window on any size of battery, where a hardcoded threshold would be
+    // meaningless on one and the whole output on another.
+    const standbyMW = 0.04 * u.capacityMW;
     let mode: BessTick["mode"] = "Standby";
-    if (netOutputMW < -2) {
-      mode = h >= 9 && h <= 16.5 ? "Solar Soak Charging" : "Night Grid Top-Up";
-    } else if (netOutputMW > 2) {
+    if (netOutputMW < -standbyMW) {
+      mode = h >= 10.5 && h <= 16 ? "Solar Soak Charging" : "Night Grid Top-Up";
+    } else if (netOutputMW > standbyMW) {
       mode = "Evening Peak Discharge";
     } else if (Math.abs(freqDev) > 0.03) {
       mode = "FFR Frequency Support";
@@ -409,9 +548,16 @@ export function sampleUnitTicks(ts: number): (UnitTick | BessTick)[] {
       unitId: u.id,
       ts,
       outputMW: netOutputMW,
-      reactiveMVAr: offline ? 0 : netOutputMW * (0.12 + 0.04 * noise(ts, 8 * 60_000, u.id.length)),
-      availableUpMW: offline || socPct <= 5 ? 0 : Math.min(u.capacityMW - netOutputMW, (socPct / 100) * usableEnergyMWh * 2),
-      availableDownMW: offline || socPct >= 95 ? 0 : Math.min(u.capacityMW + netOutputMW, ((100 - socPct) / 100) * usableEnergyMWh * 2),
+      reactiveMVAr:
+        offline ? 0 : netOutputMW * (0.12 + 0.04 * noise(ts, 8 * 60_000, u.id.length + f.seed)),
+      availableUpMW:
+        offline || socPct <= 5
+          ? 0
+          : Math.min(u.capacityMW - netOutputMW, (socPct / 100) * usableEnergyMWh * 2),
+      availableDownMW:
+        offline || socPct >= 95
+          ? 0
+          : Math.min(u.capacityMW + netOutputMW, ((100 - socPct) / 100) * usableEnergyMWh * 2),
       curtailedMW: 0,
       status: u.status,
     };
@@ -432,41 +578,49 @@ export function sampleUnitTicks(ts: number): (UnitTick | BessTick)[] {
 }
 
 /**
- * Bus telemetry.
+ * Feeder node telemetry.
  *
- * Voltage rise and reverse flow are the *distribution-side* limit on solar:
- * long before the system runs out of room, an individual feeder runs out of
- * volts. Buses with more installed solar see both effects more strongly.
+ * Voltage is the *distribution-side* limit on rooftop PV: long before an 11 kV
+ * feeder runs out of amps, its far end runs out of volts. Drop and rise both
+ * scale with route distance from the primary substation, so the tail-end recloser
+ * sees the statutory ±5 % first — in the evening peak from below, and under
+ * back-feed from above.
  */
-export function sampleBusTicks(ts: number): BusTick[] {
-  const state = computeState(ts);
-  const loading = state.loadMW / SYSTEM_PEAK_MW;
-  const solarShareOfInstalled =
-    state.solarMW / Math.max(1, UNITS.filter((u) => u.kind === "solar").reduce((a, u) => a + u.capacityMW, 0));
+export function sampleBusTicks(ts: number, feederId: string = DEFAULT_FEEDER_ID): BusTick[] {
+  const f = feederModel(feederId);
+  const state = computeState(f, ts);
+  // Signed: positive when importing, negative when the feeder back-feeds.
+  const flowRatio = state.transformerFlowMW / f.peakMW;
+  const installedPvMW = f.units
+    .filter((u) => u.kind === "solar")
+    .reduce((a, u) => a + u.capacityMW, 0);
+  const pvShareOfInstalled = state.solarMW / Math.max(1e-6, installedPvMW);
 
-  return BUSES.map((b, i) => {
-    // Local solar output, scaled from the system-wide share.
-    const localSolarMW = b.solarMW * solarShareOfInstalled;
-    // Rough local demand share, proportional to nothing in particular but
-    // stable per bus — enough to make reverse flow behave sensibly.
-    const localLoadMW = state.loadMW * (0.06 + 0.02 * hash01(i * 977));
-    const reverseFlowMW = localSolarMW - localLoadMW;
+  return f.buses.map((b, i) => {
+    const distanceShare = (b.distanceKm ?? 0) / f.routeLengthKm;
 
-    // Monaragala is the weak point: long rural feeder, heaviest solar. It only
-    // gets tight under load and back-feed, not permanently.
-    const weak = b.id === "monaragala";
+    // What this node's own rooftops are pushing out, against its share of load.
+    const nodeSolarMW = b.solarMW * pvShareOfInstalled;
+    const nodeLoadShare = 0.15 + 0.25 * hash01(i * 977 + f.seed);
+    const nodeLoadMW = state.loadMW * nodeLoadShare;
+    const reverseFlowMW = nodeSolarMW - nodeLoadMW;
+
+    // Tap set to hold the busbar a little high, so the tail end still has margin
+    // at peak. That is what an on-load tap change at the primary actually buys.
     const voltagePu =
-      1.002 -
-      (weak ? 0.055 : 0.02) * loading +
-      // Back-feed pushes voltage up — the classic high-penetration failure.
-      0.00042 * Math.max(0, reverseFlowMW) +
-      0.007 * noise(ts, 4 * 60_000, 90 + i);
+      f.busbarNoLoadPu -
+      f.tailVoltageSwingPu * distanceShare * flowRatio +
+      // Local injection lifts the node further than the aggregate flow implies.
+      // Coefficient is pu per MW of local back-feed at the far end.
+      0.011 * distanceShare * Math.max(0, reverseFlowMW) +
+      0.0035 * noise(ts, 4 * 60_000, 90 + i + f.seed);
 
+    // Room left inside the statutory band, as a share of the band. Zero means
+    // the node is sitting on the limit.
     const stabilityMarginPct = clamp(
-      (weak ? 34 : 46) - 20 * loading - 0.05 * Math.max(0, reverseFlowMW) +
-        3 * noise(ts, 9 * 60_000, 100 + i),
+      100 * (1 - Math.abs(voltagePu - 1) / MV_VOLTAGE_BAND_PU),
       0,
-      60
+      100
     );
 
     return { busId: b.id, ts, voltagePu, stabilityMarginPct, reverseFlowMW };
@@ -474,10 +628,15 @@ export function sampleBusTicks(ts: number): BusTick[] {
 }
 
 /** Sample a series backwards from `to`, for reconstructing chart history. */
-export function sampleSystemSeries(from: number, to: number, stepMs: number): SystemTick[] {
+export function sampleSystemSeries(
+  from: number,
+  to: number,
+  stepMs: number,
+  feederId: string = DEFAULT_FEEDER_ID
+): SystemTick[] {
   const out: SystemTick[] = [];
-  for (let ts = from; ts <= to; ts += stepMs) out.push(sampleSystemTick(ts));
+  for (let ts = from; ts <= to; ts += stepMs) out.push(sampleSystemTick(ts, feederId));
   return out;
 }
 
-export { SYSTEM_PEAK_MW };
+export { MV_VOLTAGE_BAND_PU };

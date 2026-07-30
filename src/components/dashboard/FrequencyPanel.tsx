@@ -10,8 +10,15 @@
  * holding it, and the net imbalance driving it. They are secondary type. They
  * qualify the hero; they do not compete with it.
  *
- * Scope note: on a distribution system these are *observed* quantities. The
- * panel reports them; nothing on this page acts on them.
+ * Scope note: on a distribution feeder these are *observed national* quantities.
+ * A 12 MW feeder does not move the frequency of a 2,500 MW island system, and the
+ * model behind this panel does not pretend otherwise — frequency and inertia come
+ * from a CEB system model, not from this feeder's balance. The panel reports them;
+ * nothing on this page acts on them.
+ *
+ * The third readout is the exception, and it is deliberate: it is the one
+ * quantity in this group the feeder *does* own. A balance residual would be
+ * identically zero here, so the slot carries the infeed flow instead.
  */
 
 import { useMemo } from "react";
@@ -75,7 +82,10 @@ export function FrequencyPanel({
 
   return (
     <Card className="flex flex-col gap-4 p-5">
-      <PanelHeader title="System frequency" note="1 s telemetry · last 5 min · observed from CEB SCADA" />
+      <PanelHeader
+        title="CEB system frequency"
+        note="1 s telemetry · last 5 min · observed at the primary, not controlled here"
+      />
 
       <div className="flex items-end justify-between gap-3">
         <div className="flex items-baseline gap-2">
@@ -143,22 +153,22 @@ export function FrequencyPanel({
       <dl className="grid grid-cols-3 gap-3 border-t border-border pt-3">
         <Detail
           label="RoCoF"
-          help="Rate of change of frequency. It rises as solar displaces spinning plant and inertia falls — the hidden cost of carrying more solar."
+          help="Rate of change of frequency on the CEB system. It rises as solar displaces spinning plant nationally and inertia falls — the hidden cost of carrying more solar."
           value={`${tick.rocofHzPerS >= 0 ? "+" : "−"}${Math.abs(tick.rocofHzPerS).toFixed(3)}`}
           unit="Hz/s"
           level={rocofLevel}
         />
         <Detail
           label="Inertia"
-          help="Synchronous inertia on the system. It is what slows a frequency deviation, and it falls as solar displaces spinning plant."
+          help="Synchronous inertia on the CEB system. It is what slows a frequency deviation, and it falls through the middle of the day as solar displaces spinning plant."
           value={tick.inertiaGWs.toFixed(2)}
           unit="GW·s"
           level={inertiaLevel}
         />
         <Detail
-          label="Imbalance"
-          help="Generation plus interchange minus demand. The quantity frequency is responding to."
-          value={formatSignedMW(tick.imbalanceMW)}
+          label={tick.transformerFlowMW < 0 ? "Net export" : "Net import"}
+          help="Signed flow at the primary substation. The one quantity in this panel the feeder owns: positive is drawing from the grid, negative is rooftop PV back-feeding up to the primary."
+          value={formatSignedMW(tick.transformerFlowMW)}
           unit="MW"
           level="normal"
         />

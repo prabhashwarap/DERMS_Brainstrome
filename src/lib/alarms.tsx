@@ -49,7 +49,13 @@ interface Tracked {
   acknowledgedAt: number | null;
 }
 
-export function AlarmProvider({ children }: { children: ReactNode }) {
+export function AlarmProvider({
+  feederId,
+  children,
+}: {
+  feederId: string;
+  children: ReactNode;
+}) {
   const [alarms, setAlarms] = useState<Alarm[]>([]);
   const [open, setOpen] = useState(false);
   // Lifecycle lives in a ref, not state: it is bookkeeping the evaluator reads,
@@ -61,9 +67,10 @@ export function AlarmProvider({ children }: { children: ReactNode }) {
     const evaluate = () => {
       const now = Date.now();
       const conditions = evaluateAlarms(
-        sampleSystemTick(now),
-        sampleUnitTicks(now),
-        sampleBusTicks(now)
+        sampleSystemTick(now, feederId),
+        sampleUnitTicks(now, feederId),
+        sampleBusTicks(now, feederId),
+        feederId
       );
 
       // A condition that persists keeps its original timestamp and its
@@ -85,10 +92,14 @@ export function AlarmProvider({ children }: { children: ReactNode }) {
       );
     };
 
+    // Conditions are per feeder, so a feeder change clears the tracked lifecycle
+    // and re-evaluates immediately: a voltage alarm on the way you just left must
+    // not keep its timestamp — or its acknowledgement — on the way you moved to.
+    trackedRef.current = new Map();
     evaluate();
     const id = setInterval(evaluate, EVAL_MS);
     return () => clearInterval(id);
-  }, []);
+  }, [feederId]);
 
   const acknowledge = useCallback((id: string) => {
     const now = Date.now();

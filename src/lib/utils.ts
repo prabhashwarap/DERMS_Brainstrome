@@ -23,12 +23,12 @@ export function formatPower(valMW: number): { value: string; unit: string; full:
 }
 
 /**
- * System-scale power, MW.
+ * Feeder power, MW.
  *
- * `formatPower` drops to kW below 1 MW, which is right at feeder scale and
- * wrong at system scale — a 0.4 MW imbalance is not "400 kW" to a balancing
- * operator. This one stays in MW throughout and sheds decimals as the number
- * grows, so a column of figures aligns.
+ * `formatPower` switches unit at 1 MW, which is right when a value could be
+ * either but wrong on a page where every axis is megawatts: labels that flip
+ * between kW and MW down one axis are unreadable. This one stays in MW and sheds
+ * decimals as the number grows, so a column of figures aligns.
  */
 export function formatMW(valMW: number): string {
   const abs = Math.abs(valMW);
@@ -37,9 +37,22 @@ export function formatMW(valMW: number): string {
   return valMW.toFixed(2);
 }
 
-/** Signed variant, for deltas and imbalances where the sign is the message. */
+/** Signed variant, for flows and deltas where the direction is the message. */
 export const formatSignedMW = (valMW: number): string =>
   `${valMW > 0 ? "+" : valMW < 0 ? "−" : ""}${formatMW(Math.abs(valMW))}`;
+
+/**
+ * Feeder energy, MWh.
+ *
+ * Fixed unit for the same reason as `formatMW`: a feeder day is 60–170 MWh and a
+ * column that silently drops to kWh for one row cannot be scanned.
+ */
+export function formatMWh(valMWh: number): string {
+  const abs = Math.abs(valMWh);
+  if (abs >= 100) return valMWh.toFixed(0);
+  if (abs >= 10) return valMWh.toFixed(1);
+  return valMWh.toFixed(2);
+}
 
 /**
  * Dynamic Energy Formatter:

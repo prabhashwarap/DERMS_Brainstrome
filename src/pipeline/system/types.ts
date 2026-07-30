@@ -1,16 +1,18 @@
 /**
- * Grid balance — canonical schemas.
+ * Feeder balance — canonical schemas.
  *
  * The product goal is narrow and it shapes every type here: **carry as much
- * solar as the grid can absorb, without losing balance**. So solar is modelled
- * asset by asset, storage is modelled as the thing that buys solar more room,
- * and everything else on the system is collapsed into a single `conventional`
- * term.
+ * rooftop solar as the distribution network can absorb, without leaving the
+ * statutory voltage band**. So PV is modelled cluster by cluster, storage is
+ * modelled as the thing that buys PV more room, and the grid behind the primary
+ * substation is collapsed into a single import term.
  *
- * That collapse is deliberate. Conventional plant is not a subject of this
- * product — but its *minimum stable generation* is the hard floor that forces
- * solar to be curtailed, so it has to be present as a constraint even though it
- * is never presented as a fleet.
+ * That collapse is deliberate. The upstream network is not a subject of this
+ * product — but the feeder's *export limit* is the hard constraint that forces PV
+ * to be curtailed, so it has to be present even though it is never presented as
+ * a fleet.
+ *
+ * Power is MW and energy is MWh throughout, as everywhere else in the app.
  */
 
 /** How fast a resource can answer a frequency deviation. */
@@ -21,16 +23,25 @@ export type UnitKind = "solar" | "battery";
 
 export type UnitStatus = "running" | "standby" | "forced-outage" | "planned-outage";
 
-/** Stack order for the supply chart — also the categorical colour order. */
-export const SOURCE_ORDER = ["solar", "other"] as const;
+/**
+ * Stack order for the supply chart — also the categorical colour order.
+ *
+ * Storage is its own category and not folded into the grid term. A battery
+ * charging from the midday PV surplus while the feeder is still importing would,
+ * if netted against the import, cancel both to near zero — reporting almost no
+ * grid supply and no storage activity at the exact moment storage is doing the
+ * most work.
+ */
+export const SOURCE_ORDER = ["solar", "battery", "grid"] as const;
 export type SourceId = (typeof SOURCE_ORDER)[number];
 
 export const SOURCE_LABEL: Record<SourceId, string> = {
-  solar: "Solar",
-  other: "Other",
+  solar: "Rooftop PV",
+  battery: "Storage",
+  grid: "Grid infeed",
 };
 
-/** Nameplate description of a solar farm or battery. */
+/** Nameplate description of a PV cluster or battery. */
 export interface Unit {
   id: string;
   name: string;
@@ -83,61 +94,189 @@ export interface BessTick extends UnitTick {
   flags: string[];
 }
 
+/**
+ * A demand hump: `[amplitude, centre hour, width]`, all relative to peak.
+ *
+ * Stated per feeder rather than derived from a profile name because the shape
+ * *is* the feeder. An industrial feeder peaks at one o'clock and falls away after
+ * the shift; a residential one is flat until six and then climbs for three hours.
+ * Collapsing that into an enum would make every feeder the same feeder.
+ */
+export type LoadHump = [amplitude: number, centreHour: number, width: number];
+
+/** The charger population on a feeder. */
+export interface EvFleet {
+  /** Single-phase domestic units, all DERMS-enrolled for V1G. */
+  domesticChargers: number;
+  domesticRatingKW: number;
+  /** Public, kerbside and DC rapid units — uncontrolled. */
+  publicChargers: number;
+  publicRatingKW: number;
+  /** After-diversity maximum demand of the whole population, MW. Not the sum of
+   *  the ratings: chargers do not draw together, and using connected capacity as
+   *  a load overstates the peak roughly threefold. Derived from the register's
+   *  `evPenetration`, so it moves with the feeder's peak. */
+  diversifiedPeakMW: number;
+  /** Which charging population the feeder's mix implies. */
+  profile: "residential" | "industrial" | "evse";
+}
+
+/**
+ * One 11 kV feeder: nameplate, network, load shape and DER.
+ *
+ * Assembled in `fleet.ts` from the shared asset register plus a balance-model
+ * supplement, so everything the dashboard shows for a feeder traces back to the
+ * same record the forecast is built on.
+ */
+export interface FeederModel {
+  id: string;
+  name: string;
+  shortName: string;
+  /** Primary substation the feeder leaves from. */
+  substation: string;
+  operator: string;
+  /** One-line character, from the register. Shown in the selector. */
+  mix: string;
+  profile: "residential" | "industrial";
+
+  /* --- rating -------------------------------------------------------- */
+  capacityMVA: number;
+  powerFactor: number;
+  /** Firm capacity in MW — `capacityMVA × powerFactor`. */
+  firmMW: number;
+
+  /* --- network ------------------------------------------------------- */
+  nominalKV: number;
+  conductor: string;
+  /** Route length of the feeder main, km. */
+  routeLengthKm: number;
+  /** Voltage swing at the far node at full loading, pu. The number that decides
+   *  how much PV the feeder can host. */
+  tailVoltageSwingPu: number;
+  /** Tap setting expressed as the no-load busbar voltage, pu. */
+  busbarNoLoadPu: number;
+
+  /* --- load ---------------------------------------------------------- */
+  /** Consumers with a rooftop PV installation. */
+  pvConsumers: number;
+  /** Peak demand including EV charging, MW. Derived from firm capacity. */
+  peakMW: number;
+  /** Load factor (mean / peak), from the register. */
+  loadFactor: number;
+  /** Peak of the non-EV base load, MW. EV is added as its own term. */
+  basePeakMW: number;
+  /** Overnight baseline as a fraction of `basePeakMW`. */
+  baseShare: number;
+  morningHump: LoadHump;
+  middayHump: LoadHump;
+  eveningHump: LoadHump;
+  /** Demand jitter amplitude. */
+  jitterAmp: number;
+  /** Demand multiplier on [Sunday, Saturday]. */
+  weekend: [number, number];
+  /** Sensitivity of demand to temperature above 26 °C, per °C. */
+  coolingCoeff: number;
+  /** Deterministic noise seed, so two feeders never share a jitter pattern. */
+  seed: number;
+
+  /* --- limits -------------------------------------------------------- */
+  /** Net export up to the primary the DERMS will allow, MW. */
+  exportLimitMW: number;
+  /** Back-feed at which the far node would reach the statutory +5 %, MW. */
+  voltageRiseLimitMW: number;
+
+  /* --- DER ----------------------------------------------------------- */
+  /** Rooftop PV as a fraction of peak demand, from the register. */
+  solarPenetration: number;
+  /** Installed rooftop PV, MW. */
+  installedPvMW: number;
+  units: Unit[];
+  buses: Bus[];
+  ev: EvFleet;
+}
+
+/** A measurement point on the feeder — busbar, sectionaliser, RMU or recloser. */
 export interface Bus {
   id: string;
   name: string;
+  /** Nominal line-to-line voltage, kV. */
   nominalKV: number;
-  /** Installed solar at this bus, MW — the hosting-capacity denominator. */
+  /** Installed rooftop PV downstream of this node, MW. */
   solarMW: number;
+  /** Route distance from the primary substation, km. Drives volt drop and rise. */
+  distanceKm?: number;
 }
 
 export interface BusTick {
   busId: string;
   ts: number;
   voltagePu: number;
-  /** Distance to the voltage collapse point as a share of nominal, %. */
+  /** Room left inside the statutory ±5 % band, % of the band. Zero = at limit. */
   stabilityMarginPct: number;
-  /** Net export up the feeder, MW. Positive means solar is back-feeding. */
+  /** Net export from this node, MW. Positive means rooftop PV is back-feeding. */
   reverseFlowMW: number;
 }
 
 /**
- * The system state at an instant.
+ * The feeder state at an instant.
  *
- * `imbalanceMW` is `generationMW + interchangeMW − loadMW`, carried on the tick
- * so every consumer reads the same arithmetic rather than re-deriving it.
+ * `transformerFlowMW` is the headline: everything the LV network cannot generate
+ * for itself comes through the 11 kV/400 V transformer, and when rooftop PV
+ * exceeds local demand it goes back the other way. It is carried on the tick so
+ * every consumer reads the same arithmetic rather than re-deriving it.
+ *
+ * Frequency, RoCoF and inertia are *national* CEB quantities. They are observed
+ * here, never derived from this feeder's balance — a 185 kW feeder moves none of
+ * them.
  */
 export interface SystemTick {
   ts: number;
   frequencyHz: number;
-  /** Rate of change of frequency, Hz/s. Negative = falling. */
+  /** Rate of change of frequency, Hz/s. Negative = falling. Observed, national. */
   rocofHzPerS: number;
+  /** Local generation on the feeder (PV + storage discharge), MW. */
   generationMW: number;
+  /** Total feeder demand including EV charging, MW. */
   loadMW: number;
-  /** Signed tie-line flow, MW. Positive = importing. */
-  interchangeMW: number;
+  /** Signed flow through the distribution transformer, MW. Positive = importing
+   *  from 11 kV, negative = back-feeding up to the primary. */
+  transformerFlowMW: number;
+  /** Transformer flow as a share of its firm capacity, %. Always positive. */
+  transformerLoadingPct: number;
+  /** Residual after local generation and the transformer, MW. Kirchhoff keeps
+   *  this at zero on a real feeder; it is carried to prove the model does too. */
   imbalanceMW: number;
-  /** Synchronous inertia currently on the system, GW·s. */
+  /** Synchronous inertia on the CEB system, GW·s. Observed, national. */
   inertiaGWs: number;
 
   /* --- the metrics this product exists for -------------------------- */
 
-  /** Solar actually delivered, MW. The headline quantity. */
+  /** Rooftop PV actually delivered, MW. The headline quantity. */
   solarMW: number;
-  /** Solar being spilled right now, MW. */
+  /** PV being curtailed by volt-watt response right now, MW. */
   curtailedMW: number;
-  /** Solar the grid could still absorb before hitting the floor, MW. */
+  /** PV the feeder could still absorb before the export limit binds, MW. */
   solarHeadroomMW: number;
-  /** Lumped non-solar synchronous generation, MW. */
-  conventionalMW: number;
-  /** Minimum stable generation of must-run plant, MW. The binding constraint. */
-  conventionalFloorMW: number;
+  /** Import through the transformer, MW. Zero when the feeder is back-feeding. */
+  gridImportMW: number;
+  /** Net export the LV network can carry before voltage rise binds, MW. */
+  gridExportLimitMW: number;
+  /** Storage output, MW. Positive = discharging, negative = charging. */
   batteryMW?: number;
+  /** Storage state of charge, %. */
+  socPct: number;
 
-  /** Supply split by source, MW. Sums to `generationMW` plus interchange. */
+  /* --- EV charging --------------------------------------------------- */
+
+  /** EV charging load as delivered under DERMS smart charging, MW. */
+  evMW: number;
+  /** What the same population would have drawn uncontrolled, MW. */
+  evUnmanagedMW: number;
+
+  /** Supply split by source, MW. Signed, and sums to `loadMW`. */
   bySource: Record<SourceId, number>;
 
-  /** Weather inputs driving the solar term. */
+  /** Weather inputs driving the PV term. */
   weather: { tempC: number; cloud: number };
 }
 
