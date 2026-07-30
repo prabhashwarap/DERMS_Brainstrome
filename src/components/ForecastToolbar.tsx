@@ -53,7 +53,7 @@ export function ForecastToolbar({ feederId, onFeederChange, bundle }: Props) {
                     <span className="flex flex-col items-start">
                       <span>{f.name}</span>
                       <span className="text-[11px] text-muted-foreground">
-                        {f.capacityMVA} MVA · {f.mix} · Balanced 3-Phase
+                        {f.capacityMVA} MVA · {f.mix}
                       </span>
                     </span>
                   </SelectItem>
@@ -68,9 +68,6 @@ export function ForecastToolbar({ feederId, onFeederChange, bundle }: Props) {
             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${badgeClass}`}>
               <Calendar className="w-3.5 h-3.5 shrink-0" />
               <span>Day Type: <strong className="font-semibold">{dayType.badgeText}</strong></span>
-            </span>
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
-              Balanced 3-Phase Feeder
             </span>
           </div>
         </div>

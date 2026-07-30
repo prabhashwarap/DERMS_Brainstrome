@@ -13,7 +13,7 @@
  * Scope note: on a distribution feeder these are *observed national* quantities.
  * A 12 MW feeder does not move the frequency of a 2,500 MW island system, and the
  * model behind this panel does not pretend otherwise — frequency and inertia come
- * from a CEB system model, not from this feeder's balance. The panel reports them;
+ * from a grid system model, not from this feeder's balance. The panel reports them;
  * nothing on this page acts on them.
  *
  * The third readout is the exception, and it is deliberate: it is the one
@@ -69,7 +69,7 @@ export function FrequencyPanel({
   return (
     <Card className="flex flex-col gap-4 p-5 h-full">
       <PanelHeader
-        title="CEB system frequency"
+        title="Grid system frequency"
         note="1 s telemetry · last 5 min · observed at the primary, not controlled here"
       />
 

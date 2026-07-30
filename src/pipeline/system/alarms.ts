@@ -97,7 +97,7 @@ export function evaluateAlarms(
       id: `freq-${dir}`,
       severity: freqLevel === "critical" ? "critical" : "warning",
       source: system("frequency"),
-      message: `CEB system frequency ${dir} — ${tick.frequencyHz.toFixed(3)} Hz (${
+      message: `Grid system frequency ${dir} — ${tick.frequencyHz.toFixed(3)} Hz (${
         tick.frequencyHz > 50 ? "+" : ""
       }${(tick.frequencyHz - 50).toFixed(3)})`,
     });
@@ -121,7 +121,7 @@ export function evaluateAlarms(
       id: "inertia",
       severity: inertiaLevel === "critical" ? "warning" : "info",
       source: system("frequency"),
-      message: `CEB synchronous inertia down to ${tick.inertiaGWs.toFixed(
+      message: `Grid synchronous inertia down to ${tick.inertiaGWs.toFixed(
         2
       )} GW·s — national plant backed off for solar`,
     });

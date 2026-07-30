@@ -33,10 +33,10 @@ import type { Bus, EvFleet, FeederModel, LoadHump, Unit } from "./types";
  *
  * A 12 MW feeder moves neither frequency nor inertia. They appear on the
  * dashboard because a DSO operator watches them, and they are modelled as
- * exogenous CEB system quantities — never derived from a feeder's balance.
+ * exogenous grid system quantities — never derived from a feeder's balance.
  */
 export const NATIONAL_GRID = {
-  /** Typical synchronous inertia on the CEB system at night, GW·s. */
+  /** Typical synchronous inertia on the national grid system at night, GW·s. */
   inertiaNightGWs: 3.35,
   /** How much of it is displaced at the midday solar peak, GW·s. */
   inertiaSolarDisplacementGWs: 0.85,

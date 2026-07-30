@@ -225,7 +225,7 @@ export interface BusTick {
  * exceeds local demand it goes back the other way. It is carried on the tick so
  * every consumer reads the same arithmetic rather than re-deriving it.
  *
- * Frequency, RoCoF and inertia are *national* CEB quantities. They are observed
+ * Frequency, RoCoF and inertia are *national* grid quantities. They are observed
  * here, never derived from this feeder's balance — a 185 kW feeder moves none of
  * them.
  */
@@ -246,7 +246,7 @@ export interface SystemTick {
   /** Residual after local generation and the transformer, MW. Kirchhoff keeps
    *  this at zero on a real feeder; it is carried to prove the model does too. */
   imbalanceMW: number;
-  /** Synchronous inertia on the CEB system, GW·s. Observed, national. */
+  /** Synchronous inertia on the grid system, GW·s. Observed, national. */
   inertiaGWs: number;
 
   /* --- the metrics this product exists for -------------------------- */

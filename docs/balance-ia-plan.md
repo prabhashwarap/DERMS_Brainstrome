@@ -374,7 +374,7 @@ rooftop PV. Frequency, RoCoF and system inertia are **transmission** quantities 
 a DSO observes but does not control.
 
 The Balance tab must say so — a single line in the header, e.g.
-*"System frequency and reserve sourced from CEB SCADA · LECO controls curtailment
+*"System frequency and reserve sourced from grid SCADA · LECO controls curtailment
 and load shedding only."* Without it, the view implies control authority that doesn't
 exist, which is the kind of misread that damages trust in a pilot.
 

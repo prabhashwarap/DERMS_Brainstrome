@@ -181,9 +181,6 @@ function FeederOverview({
             <span className="inline-flex rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-[11px] font-medium capitalize text-primary">
               {feeder.profile}
             </span>
-            <span className="inline-flex rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-              Balanced 3-Phase
-            </span>
           </div>
           <span className="text-[11px] text-muted-foreground">
             {feeder.name} · {feeder.substation} · Balanced Feeder

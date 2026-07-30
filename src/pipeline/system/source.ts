@@ -14,7 +14,7 @@
  * single constraint is what the whole dashboard is about.
  *
  * Frequency and inertia are the exception to all of the above: they are national
- * CEB quantities, modelled exogenously and merely observed here. A distribution
+ * grid quantities, modelled exogenously and merely observed here. A distribution
  * feeder of 12 MW does not move the frequency of a 2,500 MW island system, and
  * deriving one from the other would be a lie the numbers would eventually tell.
  *
@@ -235,7 +235,7 @@ function batteryPowerMW(h: number, energyMWh: number, rte = 0.9): number {
 /* national grid — observed, not derived                               */
 
 /**
- * CEB system frequency, Hz.
+ * National grid system frequency, Hz.
  *
  * Exogenous by construction. Sri Lanka is a small island system and its
  * frequency genuinely wanders further than an interconnected one: excursions
@@ -252,7 +252,7 @@ function nationalFrequencyHz(ts: number): number {
 }
 
 /**
- * Synchronous inertia on the CEB system, GW·s.
+ * Synchronous inertia on the national grid system, GW·s.
  *
  * Falls through the middle of the day as utility and rooftop solar displace
  * spinning plant nationally — the reason a distribution operator watches a

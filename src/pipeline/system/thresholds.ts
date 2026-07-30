@@ -29,7 +29,7 @@ export const THRESHOLDS = {
   stabilityMarginPct: { warning: 15, critical: 8 },
   /** Storage reserve as a share of the peak-shaving requirement, %. Inverted. */
   reserveCoverPct: { warning: 100, critical: 70 },
-  /** Synchronous inertia on the CEB system, GW·s. Inverted, and observed only. */
+  /** Synchronous inertia on the national grid, GW·s. Inverted, and observed only. */
   inertiaGWs: { warning: 2.9, critical: 2.6 },
   /** Rooftop PV curtailed as a share of what was available, %. */
   curtailmentPct: { warning: 15, critical: 35 },
