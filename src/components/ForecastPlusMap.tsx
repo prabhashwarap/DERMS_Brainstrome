@@ -3,6 +3,7 @@ import { NodeDetailPanel, lecoAccountNumber, type MapNodeDetails } from "./NodeD
 import { Badge } from "@/components/ui/badge";
 import { formatPower, formatEnergy } from "@/lib/utils";
 import { useTheme } from "@/lib/useTheme";
+import { FEEDERS } from "@/pipeline/feeders";
 import {
   Zap,
   Cable,
@@ -437,20 +438,23 @@ const fallbackRoute = (sub: [number, number], t: [number, number]): Array<[numbe
 // Deterministic per-feeder forecast so aggregate stats are a real roll-up of
 // whatever is in scope (a single feeder, a CSC's feeders, a branch, or all).
 function feederMetrics(feederId: string): { peak: number; energy: number; peakHour: number; solar: number } {
+  const feeder = FEEDERS[feederId];
   if (feederId === "angulana" || feederId === "moratuwa_north_f2") {
-    // 13 MVA feeder · 0.95 PF · 0.52 load factor · 9% solar penetration
+    // 13 MVA feeder · 0.95 PF · 0.52 load factor · 78% solar penetration
     const peak = 13 * 0.95 * 0.52;
     const energy = peak * 24 * 0.52;
     const peakHour = 19;
-    const solar = peak * 0.09 * 5.5;
+    const solarPen = feeder?.solarPenetration ?? 0.78;
+    const solar = peak * solarPen * 5.5;
     return { peak, energy, peakHour, solar };
   }
   if (feederId === "katunayake" || feederId === "seeduwa_f2") {
-    // 22 MVA feeder · 0.95 PF · 0.58 load factor · 34% solar penetration
+    // 22 MVA feeder · 0.95 PF · 0.58 load factor · 72% solar penetration
     const peak = 22 * 0.95 * 0.58;
     const energy = peak * 24 * 0.58;
     const peakHour = 18;
-    const solar = peak * 0.34 * 5.5;
+    const solarPen = feeder?.solarPenetration ?? 0.72;
+    const solar = peak * solarPen * 5.5;
     return { peak, energy, peakHour, solar };
   }
   const h = hashStr(feederId);
@@ -458,8 +462,8 @@ function feederMetrics(feederId: string): { peak: number; energy: number; peakHo
   const loadFactor = 0.55 + ((h >> 3) % 26) / 100; // 0.55-0.80
   const energy = peak * 24 * loadFactor;
   const peakHour = 17 + ((h >> 5) % 4); // 17:00-20:00
-  // Behind-the-meter rooftop PV: penetration 5-35% of peak, ~5.5 solar-hours/day.
-  const solarPen = 0.05 + ((h >> 7) % 31) / 100;
+  // Behind-the-meter rooftop PV: penetration 60-85% of peak, ~5.5 solar-hours/day.
+  const solarPen = feeder?.solarPenetration ?? (0.60 + ((h >> 7) % 26) / 100);
   const solar = peak * solarPen * 5.5;
   return { peak, energy, peakHour, solar };
 }

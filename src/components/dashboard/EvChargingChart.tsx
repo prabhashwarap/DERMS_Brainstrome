@@ -71,7 +71,14 @@ export const EvChargingChart = memo(function EvChargingChart({
         note={`${evChargerCount(feeder.ev)} chargers, ${evConnectedMW(feeder.ev).toFixed(
           1
         )} MW connected · ${feeder.ev.domesticChargers} enrolled for V1G`}
-      />
+      >
+        <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full" style={{ background: EV_MANAGED_COLOR }} />
+            <span>EV</span>
+          </span>
+        </div>
+      </PanelHeader>
 
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
         <div>
@@ -85,7 +92,7 @@ export const EvChargingChart = memo(function EvChargingChart({
           <>
             <div className="h-4 w-px bg-border" aria-hidden />
             <div>
-              <span className="tnum text-sm font-semibold leading-none text-[var(--status-normal)]">
+              <span className="tnum text-xl font-semibold leading-none text-[var(--status-normal)]">
                 {flexShiftMW > 0
                   ? `+${formatMW(flexShiftMW)} MW soaking PV`
                   : `${formatMW(flexShiftMW)} MW off the peak`}

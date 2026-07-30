@@ -78,40 +78,51 @@ export const SupplyStack = memo(function SupplyStack({
 
   const chartRows = useMemo(() => {
     return rows.map((r) => {
-      // Grid and storage keep their sign. A charging battery and a back-feeding
-      // transformer are negative supply, and recharts stacks them below the
-      // axis — which is how every operator chart draws storage, and the only way
-      // the stack can still sum to the demand line.
-      const grid = r.grid ?? 0;
-      const battery = r.battery ?? 0;
+      const gridRaw = r.grid ?? 0;
+      const batteryRaw = r.battery ?? 0;
       const solar = Math.max(0, r.solar ?? 0);
-      const totalSupply = grid + battery + solar;
+
+      // Stack physical supply sources positively (>= 0) starting from Y = 0
+      const gridImport = Math.max(0, gridRaw);
+      const batteryDischarge = Math.max(0, batteryRaw);
+      const solarSupply = solar;
+      const totalSupply = gridImport + batteryDischarge + solarSupply;
 
       const isPastOrNow = r.load !== undefined;
       const isFutureOrNow = r.loadForecast !== undefined;
       const demandVal = r.load ?? r.loadForecast ?? 0;
+      const batteryCharge = Math.max(0, -batteryRaw);
+      const grossDemandVal = demandVal + batteryCharge;
       const spill = Math.max(0, r.solarPotential - solar);
+      const gridExport = Math.max(0, -gridRaw);
 
       return {
         ts: r.ts,
-        // Past stacked series
-        grid: isPastOrNow ? grid : undefined,
-        battery: isPastOrNow ? battery : undefined,
-        solar: isPastOrNow ? solar : undefined,
-        // Future stacked series
-        gridForecast: isFutureOrNow ? grid : undefined,
-        batteryForecast: isFutureOrNow ? battery : undefined,
-        solarForecast: isFutureOrNow ? solar : undefined,
+        // Past stacked series (positive supply)
+        grid: isPastOrNow ? gridImport : undefined,
+        battery: isPastOrNow ? batteryDischarge : undefined,
+        solar: isPastOrNow ? solarSupply : undefined,
+        // Future stacked series (positive supply)
+        gridForecast: isFutureOrNow ? gridImport : undefined,
+        batteryForecast: isFutureOrNow ? batteryDischarge : undefined,
+        solarForecast: isFutureOrNow ? solarSupply : undefined,
 
         // Demand lines
         load: isPastOrNow ? r.load : undefined,
         loadForecast: isFutureOrNow ? r.loadForecast : undefined,
+        grossLoad: isPastOrNow && batteryCharge > 0.01 ? grossDemandVal : undefined,
+        grossLoadForecast: isFutureOrNow && batteryCharge > 0.01 ? grossDemandVal : undefined,
 
         // Raw numbers for tooltips
-        rawGrid: grid,
-        rawBattery: battery,
+        rawGrid: gridRaw,
+        rawBattery: batteryRaw,
         rawSolar: solar,
+        gridImport,
+        gridExport,
+        batteryDischarge,
+        batteryCharge,
         demandVal,
+        grossDemandVal,
         supplyVal: totalSupply,
         spillVal: spill,
         transformerFlowVal: r.transformerFlow,
@@ -171,7 +182,7 @@ export const SupplyStack = memo(function SupplyStack({
           {formatMW(Math.abs(flowMW))}
         </span>
         <span className="text-sm font-medium text-muted-foreground">
-          kW {exporting ? "export to 11 kV" : "import from 11 kV"}
+          MW {exporting ? "export to 11 kV" : "import from 11 kV"}
         </span>
         <span className="tnum text-xs text-muted-foreground">
           · {loadingPct.toFixed(0)} % of {feeder.firmMW.toFixed(1)} MW firm
@@ -180,15 +191,8 @@ export const SupplyStack = memo(function SupplyStack({
 
       <div className="h-[280px] w-full">
         <ResponsiveContainer width="100%" height="100%">
-          {/* stackOffset="sign" is load-bearing. With the default offset each
-              series stacks on the running total *including* negatives, so once
-              the transformer reverses the PV band inherits a negative baseline
-              and paints itself below the axis — a chart stating that rooftop PV
-              generates negative power. "sign" stacks positives up from zero and
-              negatives down from zero, which is what they physically are. */}
           <AreaChart
             data={chartRows}
-            stackOffset="sign"
             margin={{ top: 8, right: 8, bottom: 4, left: 0 }}
           >
             <CartesianGrid stroke="var(--viz-grid)" vertical={false} />
@@ -327,7 +331,12 @@ interface TooltipPayload {
     rawGrid: number;
     rawBattery: number;
     rawSolar: number;
+    gridImport: number;
+    gridExport: number;
+    batteryDischarge: number;
+    batteryCharge: number;
     demandVal: number;
+    grossDemandVal: number;
     supplyVal: number;
     spillVal: number;
     transformerFlowVal: number;
@@ -353,7 +362,7 @@ function StackTooltip({
   const grid = rowData?.rawGrid ?? 0;
   const battery = rowData?.rawBattery ?? 0;
   const solar = rowData?.rawSolar ?? 0;
-  const supply = grid + battery + solar;
+  const batteryCharge = rowData?.batteryCharge ?? 0;
   const spill = rowData?.spillVal ?? 0;
   const transformerFlow = rowData?.transformerFlowVal ?? 0;
 
@@ -373,21 +382,29 @@ function StackTooltip({
       <table className="tnum w-full">
         <tbody>
           <tr>
-            <td className="pr-3 text-muted-foreground">Feeder demand</td>
+            <td className="pr-3 text-muted-foreground">Consumer demand</td>
             <td className="text-right font-medium">{formatMW(demand)} MW</td>
           </tr>
+          {batteryCharge > 0.01 && (
+            <tr>
+              <td className="pr-3 text-[11px] text-muted-foreground">Storage charging load</td>
+              <td className="text-right text-[11px] font-medium text-[var(--src-battery)]">
+                +{formatMW(batteryCharge)} MW
+              </td>
+            </tr>
+          )}
           <tr className="border-t border-border/50">
-            <td className="pr-3 text-[11px] text-muted-foreground">Rooftop PV</td>
+            <td className="pr-3 text-[11px] text-muted-foreground">Rooftop PV generation</td>
             <td className="text-right text-[11px] font-medium text-[var(--src-solar)]">
               {formatMW(solar)} MW
             </td>
           </tr>
           <tr>
-            <td className="pr-3 text-[11px] text-muted-foreground">Storage</td>
+            <td className="pr-3 text-[11px] text-muted-foreground">Storage output</td>
             <td className="text-right text-[11px] font-medium">{formatSignedMW(battery)} MW</td>
           </tr>
           <tr>
-            <td className="pr-3 text-[11px] text-muted-foreground">Grid</td>
+            <td className="pr-3 text-[11px] text-muted-foreground">Primary grid infeed</td>
             <td className="text-right text-[11px] font-medium">{formatSignedMW(grid)} MW</td>
           </tr>
           {spill > 0.03 && (
@@ -411,10 +428,12 @@ function StackTooltip({
           </tr>
           <tr>
             <td className="pr-3 pt-0.5 text-[11px] text-muted-foreground">
-              {transformerFlow < 0 ? "Exporting to the primary" : "Importing from the primary"}
+              {transformerFlow < 0 ? "Exporting to the primary grid" : "Importing from the primary grid"}
             </td>
             <td className="pt-0.5 text-right text-[11px] text-muted-foreground">
-              {formatMW(supply)} MW supplied
+              {transformerFlow < 0
+                ? `${formatMW(Math.abs(transformerFlow))} MW back-feed`
+                : `${formatMW(transformerFlow)} MW imported`}
             </td>
           </tr>
         </tbody>

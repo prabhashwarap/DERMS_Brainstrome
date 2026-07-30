@@ -55,7 +55,7 @@ import { SolarToday } from "./SolarToday";
 import { EventsPanel } from "./EventsPanel";
 import { startOfLocalDay } from "@/pipeline/calendar";
 import { feederDayTotals } from "@/pipeline/system/derive";
-import { FEEDER_MODEL_LIST, feederModel, solarPenetrationPct } from "@/pipeline/system/fleet";
+import { FEEDER_MODEL_LIST, feederModel } from "@/pipeline/system/fleet";
 import type { FeederModel, SystemTick } from "@/pipeline/system/types";
 import { useStackSeries, useSystemTick } from "@/lib/useBalance";
 import { formatMW, formatMWh } from "@/lib/utils";
@@ -89,7 +89,7 @@ export function DashboardView({
         <FrequencyPanel tick={tick} trace={trace} />
       </div>
 
-      {/* Three DER status charts: rooftop PV, EV charging, and the BESS. */}
+      {/* Three DER status charts: rooftop PV, EV charging, and Battery Storage. */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <SolarExportChart rows={rows} now={now} tick={tick} feeder={feeder} />
         <EvChargingChart rows={rows} now={now} tick={tick} feeder={feeder} />
@@ -185,10 +185,7 @@ function FeederOverview({
           <span className="text-[11px] text-muted-foreground">
             {feeder.name} · {feeder.substation}
           </span>
-          <span className="text-[11px] text-muted-foreground">
-            {feeder.conductor}, {feeder.routeLengthKm} km · {feeder.pvConsumers} PV
-            consumers · {solarPenetrationPct(feeder).toFixed(0)} % PV penetration
-          </span>
+
         </div>
 
         {/* Separator — visual hierarchy between scope and metrics */}

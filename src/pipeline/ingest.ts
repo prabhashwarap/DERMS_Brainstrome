@@ -130,7 +130,7 @@ export function loadFeederHistory(feeder: Feeder, opts: HistoryOptions): Reading
   const peakMW = capacityMW(feeder) * (feeder.profile === "industrial" ? 0.66 : 0.6);
   // Rooftop PV is sized against the feeder's own peak and is deliberately
   // strong enough to create a visible midday dip on higher-penetration feeders.
-  const solarPeak = peakMW * Math.min(0.4, feeder.solarPenetration * 1.4 + 0.06);
+  const solarPeak = peakMW * feeder.solarPenetration * 0.85;
 
   const readings: Reading[] = [];
   let tempAnom = 0;

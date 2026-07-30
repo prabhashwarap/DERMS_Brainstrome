@@ -37,7 +37,7 @@ export type SourceId = (typeof SOURCE_ORDER)[number];
 
 export const SOURCE_LABEL: Record<SourceId, string> = {
   solar: "Rooftop PV",
-  battery: "Storage",
+  battery: "Battery Storage",
   grid: "Grid infeed",
 };
 

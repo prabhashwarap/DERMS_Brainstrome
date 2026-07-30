@@ -127,8 +127,8 @@ const DEFAULT_SUPPLEMENT: BalanceSupplement = {
   voltageRiseLimitMW: 4,
   pvConsumers: 300,
   dermsEnrolledShare: 0.65,
-  bessMW: 0,
-  bessMWh: 0,
+  bessMW: 2,
+  bessMWh: 4,
   ev: {
     domesticChargers: 150,
     domesticRatingKW: 7.4,
@@ -144,7 +144,7 @@ const DEFAULT_SUPPLEMENT: BalanceSupplement = {
 };
 
 const SUPPLEMENTS: Partial<Record<FeederId, BalanceSupplement>> = {
-  /* --- Velona / Angulana — 13 MVA, residential, 9 % PV ---------------- */
+  /* --- Velona / Angulana — 13 MVA, residential, 78 % PV ---------------- */
   angulana: {
     ...DEFAULT_SUPPLEMENT,
     peakLoading: 0.52,
@@ -165,19 +165,17 @@ const SUPPLEMENTS: Partial<Record<FeederId, BalanceSupplement>> = {
     tailVoltageSwingPu: 0.042,
     busbarNoLoadPu: 1.02,
 
-    // The primary substation's reverse-power setting. Far above anything this
-    // feeder can reach at 9 % PV penetration — which is the useful fact rather
-    // than a problem: the gap is hosting capacity nobody has taken up yet.
-    exportLimitMW: 1.2,
-    voltageRiseLimitMW: 3.5,
+    // The primary substation's reverse-power setting for a high solar feeder.
+    // At 78 % PV penetration (~5.0 MW PV), midday surplus feeds back into the
+    // primary grid, managed by BESS solar soak and DERMS volt-watt response.
+    exportLimitMW: 3.5,
+    voltageRiseLimitMW: 5.2,
 
-    pvConsumers: 214,
-    dermsEnrolledShare: 0.66,
-    // No feeder-level storage. At 9 % penetration there is no midday surplus to
-    // store, and a battery here would be solving a problem the feeder has not
-    // got.
-    bessMW: 0,
-    bessMWh: 0,
+    pvConsumers: 540,
+    dermsEnrolledShare: 0.70,
+    // 2.5 MW / 5.0 MWh feeder-level LFP battery storage installed at primary compound.
+    bessMW: 2.5,
+    bessMWh: 5.0,
 
     ev: {
       domesticChargers: 240,
@@ -195,14 +193,13 @@ const SUPPLEMENTS: Partial<Record<FeederId, BalanceSupplement>> = {
     ],
   },
 
-  /* --- Seeduwa / Katunayake — 22 MVA, industrial, 34 % PV ------------- */
+  /* --- Seeduwa / Katunayake — 22 MVA, industrial, 72 % PV ------------- */
   katunayake: {
     ...DEFAULT_SUPPLEMENT,
     peakLoading: 0.55,
     // Industrial and commercial: a broad daytime plateau peaking at one o'clock,
-    // on a floor held up by shift work and refrigeration. The peak lands *on* the
-    // PV peak rather than after it, which is why 34 % penetration gives this
-    // feeder no trouble at all — the load is there to absorb it.
+    // on a floor held up by shift work and refrigeration. At 72 % penetration,
+    // factory rooftop arrays feed surplus back to the primary substation.
     baseShare: 0.45,
     morningHump: [0.14, 8.0, 1.4],
     middayHump: [0.49, 13.0, 3.4],
@@ -216,14 +213,13 @@ const SUPPLEMENTS: Partial<Record<FeederId, BalanceSupplement>> = {
     tailVoltageSwingPu: 0.051,
     busbarNoLoadPu: 1.022,
 
-    exportLimitMW: 2.5,
-    voltageRiseLimitMW: 6,
+    exportLimitMW: 5.5,
+    voltageRiseLimitMW: 8.5,
 
-    pvConsumers: 61,
+    pvConsumers: 120,
     // Commercial and industrial roofs are recent and almost all on smart
-    // inverters, so nearly the whole fleet answers a curtailment instruction —
-    // the opposite of a legacy domestic feeder.
-    dermsEnrolledShare: 0.82,
+    // inverters, so nearly the whole fleet answers a curtailment instruction.
+    dermsEnrolledShare: 0.85,
     bessMW: 4,
     bessMWh: 8,
 

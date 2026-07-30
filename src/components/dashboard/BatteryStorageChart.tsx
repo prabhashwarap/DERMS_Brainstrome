@@ -14,15 +14,14 @@ import { PanelHeader } from "./tiles";
 import { LKT_OFFSET_MIN, formatLKT } from "@/pipeline/calendar";
 import {
   hasStorage,
-  installedStorageMW,
   installedStorageMWh,
   solarPenetrationPct,
 } from "@/pipeline/system/fleet";
 import type { StackRow } from "@/lib/useBalance";
-import { cn, formatMW, formatMWh, formatSignedMW } from "@/lib/utils";
+import { cn, formatMW, formatMWh } from "@/lib/utils";
 import type { FeederModel, SystemTick } from "@/pipeline/system/types";
 
-const SOC_COLOR = "var(--status-normal)";
+const BESS_COLOR = "var(--src-battery)";
 
 export const BatteryStorageChart = memo(function BatteryStorageChart({
   rows,
@@ -48,8 +47,6 @@ export const BatteryStorageChart = memo(function BatteryStorageChart({
     return out;
   }, [rows]);
 
-  // SoC and power both come off the tick series. Recomputing the schedule here
-  // would let this chart and the supply stack disagree about the same battery.
   const chartData = useMemo(() => {
     return rows.map((r) => {
       const isPastOrNow = r.load !== undefined;
@@ -67,33 +64,24 @@ export const BatteryStorageChart = memo(function BatteryStorageChart({
   }, [rows]);
 
   const liveSocPct = tick.socPct;
-  const livePowerMW = tick.batteryMW ?? 0;
-  const ratedMW = installedStorageMW(feeder);
   const ratedMWh = installedStorageMWh(feeder);
-  // Energy still available to discharge, at the current state of charge.
   const availableMWh = (liveSocPct / 100) * ratedMWh;
-  // 2 % of rating: the unit's own auxiliaries, not a dispatch. Scaled to the
-  // unit, so the dead band means the same thing on any size of battery.
-  const deadbandMW = 0.02 * Math.max(ratedMW, 0.001);
-  const charging = livePowerMW < -deadbandMW;
-  const discharging = livePowerMW > deadbandMW;
 
-  // Most distribution feeders have no storage, and this is one of them.
-  // Drawing a flat 0 % state-of-charge trace would assert a cabinet exists and
-  // is dead flat; saying the slot is empty is both true and more useful, so the
-  // panel states what storage would buy this particular feeder instead.
   if (!hasStorage(feeder)) {
     return (
       <Card className="flex flex-col gap-3 p-5">
-        <PanelHeader title="Community BESS" note="No storage on this feeder" />
+        <PanelHeader title="Battery Storage" note="No storage on this feeder">
+          <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: BESS_COLOR }} />
+              <span>Battery Storage</span>
+            </span>
+          </div>
+        </PanelHeader>
         <div className="flex flex-1 flex-col justify-center gap-2 py-6">
           <p className="text-sm text-muted-foreground">
             {feeder.shortName} has no battery installed.
           </p>
-          {/* What storage would actually buy *this* feeder. On a high-PV way it
-              is curtailed energy; on a heavily loaded low-PV way it is
-              feeder headroom. Saying "PV has nowhere to go" on a feeder
-              that never curtails would be a confident falsehood. */}
           <p className="text-[11px] text-muted-foreground">
             {tick.curtailedMW > 0.03
               ? `${formatMW(
@@ -113,34 +101,33 @@ export const BatteryStorageChart = memo(function BatteryStorageChart({
   return (
     <Card className="flex flex-col gap-3 p-5">
       <PanelHeader
-        title="Community BESS"
-        note={`${ratedMW.toFixed(1)} MW / ${ratedMWh.toFixed(1)} MWh LFP at ${
-          feeder.substation
-        } · state of charge`}
-      />
+        title="Battery Storage"
+        note="State of charge (%) & fleet capacity"
+      >
+        <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full" style={{ background: BESS_COLOR }} />
+            <span>Battery Storage</span>
+          </span>
+        </div>
+      </PanelHeader>
 
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
         <div>
-          <span className="tnum text-xl font-semibold leading-none text-[var(--status-normal)]">
+          <span className="tnum text-xl font-semibold leading-none text-[var(--src-battery)]">
             {liveSocPct.toFixed(1)}%
           </span>
+          <span className="ml-1 text-xs text-muted-foreground">SoC</span>
+        </div>
+        <div className="h-4 w-px bg-border" aria-hidden />
+        <div>
+          <span className="tnum text-xl font-semibold leading-none text-foreground">
+            {formatMWh(availableMWh)} MWh
+          </span>
           <span className="ml-1 text-xs text-muted-foreground">
-            SoC · {formatMWh(availableMWh)} MWh
+            stored / {formatMWh(ratedMWh)} MWh usable
           </span>
         </div>
-        {(charging || discharging) && (
-          <>
-            <div className="h-4 w-px bg-border" aria-hidden />
-            <div>
-              <span className="tnum text-sm font-semibold leading-none text-foreground">
-                {formatMW(Math.abs(livePowerMW))} MW
-              </span>
-              <span className="ml-1 text-xs text-muted-foreground">
-                {charging ? "charging" : "discharging"}
-              </span>
-            </div>
-          </>
-        )}
       </div>
 
       <div className="h-[160px] w-full">
@@ -171,9 +158,9 @@ export const BatteryStorageChart = memo(function BatteryStorageChart({
             <Area
               type="monotone"
               dataKey="soc"
-              fill={SOC_COLOR}
+              fill={BESS_COLOR}
               fillOpacity={0.25}
-              stroke={SOC_COLOR}
+              stroke={BESS_COLOR}
               strokeWidth={2}
               isAnimationActive={false}
               connectNulls={false}
@@ -182,9 +169,9 @@ export const BatteryStorageChart = memo(function BatteryStorageChart({
             <Area
               type="monotone"
               dataKey="socForecast"
-              fill={SOC_COLOR}
+              fill={BESS_COLOR}
               fillOpacity={0.1}
-              stroke={SOC_COLOR}
+              stroke={BESS_COLOR}
               strokeDasharray="4 4"
               strokeWidth={1.8}
               isAnimationActive={false}
@@ -247,24 +234,27 @@ function BatteryTooltip({
         <tbody>
           <tr>
             <td className="pr-3 text-muted-foreground">State of charge</td>
-            <td className="text-right font-medium text-[var(--status-normal)]">
+            <td className="text-right font-medium text-[var(--src-battery)]">
               {soc.toFixed(1)} %
             </td>
           </tr>
           <tr>
-            <td className="pr-3 text-[11px] text-muted-foreground">Stored</td>
+            <td className="pr-3 text-[11px] text-muted-foreground">Available energy</td>
             <td className="text-right text-[11px] font-medium">{formatMWh(storedMWh)} MWh</td>
           </tr>
-          <tr className="border-t border-border">
-            <td className="pr-3 pt-1 text-[11px] font-medium">
-              {power < 0 ? "Charging" : "Discharging"}
-            </td>
-            <td className="pt-1 text-right text-[11px] font-medium">
-              {formatSignedMW(power)} MW
-            </td>
-          </tr>
+          {Math.abs(power) > 0.01 && (
+            <tr className="border-t border-border">
+              <td className="pr-3 pt-1 text-[11px] font-medium">
+                {power < 0 ? "Charging" : "Discharging"}
+              </td>
+              <td className="pt-1 text-right text-[11px] font-medium">
+                {formatMW(Math.abs(power))} MW
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>
   );
 }
+
