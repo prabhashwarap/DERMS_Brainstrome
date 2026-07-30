@@ -21,7 +21,7 @@
  * identically zero here, so the slot carries the infeed flow instead.
  */
 
-import { useMemo } from "react";
+
 import {
   CartesianGrid,
   Line,
@@ -33,17 +33,16 @@ import {
   YAxis,
 } from "recharts";
 import { Card } from "@/components/ui/card";
-import { PanelHeader, Term } from "./tiles";
+import { PanelHeader } from "./tiles";
 import { localParts } from "@/pipeline/calendar";
 import {
   LEVEL_CLASS,
   NOMINAL_HZ,
   THRESHOLDS,
   classifyDeviation,
-  classifyFloor,
 } from "@/pipeline/system/thresholds";
 import type { SystemTick } from "@/pipeline/system/types";
-import { cn, formatSignedMW } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 const WARN = THRESHOLDS.frequencyHz.warning;
 
@@ -63,25 +62,12 @@ export function FrequencyPanel({
   trace: { ts: number; frequencyHz: number }[];
 }) {
   const level = classifyDeviation(tick.frequencyHz - NOMINAL_HZ, THRESHOLDS.frequencyHz);
-  const rocofLevel = classifyDeviation(tick.rocofHzPerS, THRESHOLDS.rocofHzPerS);
-  const inertiaLevel = classifyFloor(tick.inertiaGWs, THRESHOLDS.inertiaGWs);
   const deviation = tick.frequencyHz - NOMINAL_HZ;
 
-  // The domain never closes tighter than the warning band, so a quiet trace
-  // reads as quiet instead of being magnified into apparent turbulence — and it
-  // opens up if the trace leaves the band, so an excursion is never clipped.
-  const domain = useMemo<[number, number]>(() => {
-    let lo = NOMINAL_HZ - WARN - 0.01;
-    let hi = NOMINAL_HZ + WARN + 0.01;
-    for (const p of trace) {
-      lo = Math.min(lo, p.frequencyHz - 0.01);
-      hi = Math.max(hi, p.frequencyHz + 0.01);
-    }
-    return [lo, hi];
-  }, [trace]);
+
 
   return (
-    <Card className="flex flex-col gap-4 p-5">
+    <Card className="flex flex-col gap-4 p-5 h-full">
       <PanelHeader
         title="CEB system frequency"
         note="1 s telemetry · last 5 min · observed at the primary, not controlled here"
@@ -112,7 +98,7 @@ export function FrequencyPanel({
         </span>
       </div>
 
-      <div className="h-[132px] w-full">
+      <div className="flex-1 min-h-[240px] w-full">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={trace} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
             <CartesianGrid stroke="var(--viz-grid)" vertical={false} />
@@ -127,12 +113,12 @@ export function FrequencyPanel({
             />
             <ReferenceLine y={NOMINAL_HZ} stroke="var(--viz-divider)" strokeDasharray="4 4" />
             <YAxis
-              domain={domain}
+              domain={["auto", "auto"]}
               tick={{ fill: "var(--viz-axis)", fontSize: 11 }}
               axisLine={false}
               tickLine={false}
               width={44}
-              tickFormatter={(v: number) => v.toFixed(2)}
+              tickFormatter={(v: number) => v.toFixed(3)}
             />
             <Line
               type="linear"
@@ -149,59 +135,7 @@ export function FrequencyPanel({
           </LineChart>
         </ResponsiveContainer>
       </div>
-
-      <dl className="grid grid-cols-3 gap-3 border-t border-border pt-3">
-        <Detail
-          label="RoCoF"
-          help="Rate of change of frequency on the CEB system. It rises as solar displaces spinning plant nationally and inertia falls — the hidden cost of carrying more solar."
-          value={`${tick.rocofHzPerS >= 0 ? "+" : "−"}${Math.abs(tick.rocofHzPerS).toFixed(3)}`}
-          unit="Hz/s"
-          level={rocofLevel}
-        />
-        <Detail
-          label="Inertia"
-          help="Synchronous inertia on the CEB system. It is what slows a frequency deviation, and it falls through the middle of the day as solar displaces spinning plant."
-          value={tick.inertiaGWs.toFixed(2)}
-          unit="GW·s"
-          level={inertiaLevel}
-        />
-        <Detail
-          label={tick.transformerFlowMW < 0 ? "Net export" : "Net import"}
-          help="Signed flow at the primary substation. The one quantity in this panel the feeder owns: positive is drawing from the grid, negative is rooftop PV back-feeding up to the primary."
-          value={formatSignedMW(tick.transformerFlowMW)}
-          unit="MW"
-          level="normal"
-        />
-      </dl>
     </Card>
-  );
-}
-
-function Detail({
-  label,
-  value,
-  unit,
-  level,
-  help,
-}: {
-  label: string;
-  value: string;
-  unit: string;
-  level: "normal" | "warning" | "critical";
-  help: string;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <dt>
-        <Term help={help}>{label}</Term>
-      </dt>
-      <dd className="flex items-baseline gap-1">
-        <span className={cn("tnum text-lg font-semibold leading-none", LEVEL_CLASS[level].text)}>
-          {value}
-        </span>
-        <span className="text-[11px] font-medium text-muted-foreground">{unit}</span>
-      </dd>
-    </div>
   );
 }
 

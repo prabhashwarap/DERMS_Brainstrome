@@ -245,9 +245,9 @@ function batteryPowerMW(h: number, energyMWh: number, rte = 0.9): number {
 function nationalFrequencyHz(ts: number): number {
   return (
     50 +
-    0.09 * noise(ts, 11 * 60_000, 71) +
-    0.03 * noise(ts, 45_000, 72) +
-    0.009 * noise(ts, 2_500, 73)
+    0.018 * noise(ts, 11 * 60_000, 71) +
+    0.008 * noise(ts, 45_000, 72) +
+    0.002 * noise(ts, 2_500, 73)
   );
 }
 
