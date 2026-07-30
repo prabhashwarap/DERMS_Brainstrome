@@ -357,6 +357,13 @@ const FeederCard = memo(function FeederCard({ bundle }: { bundle: Bundle }) {
     `${f.mix} (${f.profile === "residential" ? "Bimodal" : "Duck curve"})`,
   ]);
 
+  rows.push([
+    "Phase Balance",
+    <span key="balance" className="tnum font-medium text-emerald-600 dark:text-emerald-400">
+      Balanced (3-Phase 11 kV)
+    </span>,
+  ]);
+
   return (
     <Card>
       <CardHeader className="pb-2">
