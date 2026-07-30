@@ -77,7 +77,7 @@
        it a hue would let it compete with the series that matter. */
     --src-conventional: #4A5568;
     --src-solar: #BE7F08;
-    --src-battery: #8B5CF6;
+    --src-battery: #06B6D4;
     --src-import: #DB2777;
 
     /* Status — reserved, never reused as a series colour. */
@@ -136,7 +136,7 @@
        separately validated, not an automatic flip of the dark set. */
     --src-conventional: #94A3B8;
     --src-solar: #B8860B;
-    --src-battery: #7C3AED;
+    --src-battery: #0891B2;
     --src-import: #DB2777;
 
     --status-normal: #64748B;

@@ -17,7 +17,7 @@ import type { StackRow } from "@/lib/useBalance";
 import { cn, formatMW, formatSignedMW } from "@/lib/utils";
 import type { FeederModel, SystemTick } from "@/pipeline/system/types";
 
-const EV_MANAGED_COLOR = "var(--src-battery)"; // DERMS smart EV charging
+const EV_MANAGED_COLOR = "var(--viz-ev-actual)"; // DERMS smart EV charging
 
 export const EvChargingChart = memo(function EvChargingChart({
   rows,
@@ -82,7 +82,7 @@ export const EvChargingChart = memo(function EvChargingChart({
 
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
         <div>
-          <span className="tnum text-xl font-semibold leading-none text-[var(--src-battery)]">
+          <span className="tnum text-xl font-semibold leading-none text-[var(--viz-ev-actual)]">
             {formatMW(liveEvMW)}
           </span>
           <span className="ml-1 text-xs text-muted-foreground">MW charging</span>
@@ -198,7 +198,7 @@ function EvTooltip({
         <tbody>
           <tr>
             <td className="pr-3 text-muted-foreground">Smart V1G load</td>
-            <td className="text-right font-medium text-[var(--src-battery)]">
+            <td className="text-right font-medium text-[var(--viz-ev-actual)]">
               {formatMW(managed)} MW
             </td>
           </tr>
