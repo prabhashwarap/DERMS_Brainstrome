@@ -1,6 +1,6 @@
 # Code Map (graphify)
 
-_55 files · 199 exported symbols · regenerate with `npm run graphify`._
+_63 files · 217 exported symbols · regenerate with `npm run graphify`._
 
 Read this map to locate code, then open only the file(s) you need. Signatures are compact (params + annotated return type); tags like `[memo]` note wrappers.
 
@@ -49,6 +49,24 @@ Read this map to locate code, then open only the file(s) you need. Signatures ar
 - interface MapNodeDetails
 - fn lecoAccountNumber(nodeId: string): string
 - NodeDetailPanel({ node, onClose, onFilterToNode }: NodeDetailPanelProps)
+
+## src/components/curtailment/ActiveDispatchesPanel.tsx
+- ActiveDispatchesPanel({ events, onRevoke }: Props)
+
+## src/components/curtailment/CurtailmentChart.tsx
+- CurtailmentChart({ series, curtailedPct, commandsCount, successfulCount, failedCount, }: Props)
+
+## src/components/curtailment/CurtailmentHistoryLog.tsx
+- CurtailmentHistoryLog({ events }: Props)
+
+## src/components/curtailment/CurtailmentView.tsx
+- CurtailmentView({ feederId, onFeederChange }: Props)
+
+## src/components/curtailment/DerFleetComplianceTable.tsx
+- DerFleetComplianceTable({ sites }: Props)
+
+## src/components/curtailment/DispatchModal.tsx
+- DispatchModal({ open, onClose, onDispatch }: Props)
 
 ## src/components/dashboard/AlarmDrawer.tsx
 - AlarmDrawer()
@@ -151,6 +169,9 @@ Read this map to locate code, then open only the file(s) you need. Signatures ar
 - fn useIsStale(lastTs: number, expectedIntervalMs: number): boolean
 - fn useGridRisk(feederId: string, customWeights?: RiskWeights, intervalMs): { gri: GridRiskIndex; history: GridRiskHistoryPoint[]; now: number; }
 
+## src/lib/useCurtailment.ts
+- fn useCurtailment(feederId: string)
+
 ## src/lib/useTheme.ts
 - fn useTheme(): "dark" | "light"
 
@@ -176,6 +197,19 @@ Read this map to locate code, then open only the file(s) you need. Signatures ar
 - const SLOTS_PER_DAY
 - fn floorQuarter(ts: number)
 - fn startOfLocalDay(ts: number): number
+
+## src/pipeline/curtailment.ts
+- type CurtailmentMode
+- type DispatchReason
+- type ProtocolType
+- type ComplianceStatus
+- interface CurtailmentEvent
+- interface DerFleetSite
+- interface CurtailmentTimeSeriesPoint
+- const REASON_LABELS
+- fn getFeederFleetSites(feederId: string): DerFleetSite[]
+- fn getInitialCurtailmentEvents(feederId: string): CurtailmentEvent[]
+- fn getCurtailmentTimeSeries(feederId: string, events: CurtailmentEvent[]): CurtailmentTimeSeriesPoint[]
 
 ## src/pipeline/der.ts
 - fn jitter(ts: number, salt: number): number

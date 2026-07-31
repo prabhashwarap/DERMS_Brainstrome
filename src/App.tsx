@@ -18,6 +18,7 @@ const ForecastPlus = lazy(() =>
 // — the code is needed immediately either way. (It was lazy while it was the
 // secondary "Balance" destination; that reason went away with the rename.)
 import { DashboardView } from "@/components/dashboard/DashboardView";
+import { CurtailmentView } from "@/components/curtailment/CurtailmentView";
 import { AlarmDrawer } from "@/components/dashboard/AlarmDrawer";
 import { AlarmProvider } from "@/lib/alarms";
 import { FEEDERS, type FeederId } from "@/pipeline/feeders";
@@ -64,7 +65,13 @@ export default function App() {
   );
 
   const title =
-    activeNav === "dashboard" ? "Dashboard" : activeNav === "forecastPlus" ? "Forecast+" : "Forecasting";
+    activeNav === "dashboard"
+      ? "Dashboard"
+      : activeNav === "curtailment"
+      ? "Curtailment Control Center"
+      : activeNav === "forecastPlus"
+      ? "Forecast+"
+      : "Forecasting";
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -81,6 +88,11 @@ export default function App() {
           // The balance model lives in pipeline/system and reads the same asset
           // register the forecast does, so it needs the id and nothing else.
           <DashboardView
+            feederId={feederId}
+            onFeederChange={(id) => setFeederId(id as FeederId)}
+          />
+        ) : activeNav === "curtailment" ? (
+          <CurtailmentView
             feederId={feederId}
             onFeederChange={(id) => setFeederId(id as FeederId)}
           />

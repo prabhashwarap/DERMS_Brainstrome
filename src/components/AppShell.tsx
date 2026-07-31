@@ -12,6 +12,7 @@ import {
   SunMedium,
   TrendingUp,
   Map,
+  ShieldAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/Logo";
@@ -30,6 +31,7 @@ import { cn } from "@/lib/utils";
 
 export const NAV = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { id: "curtailment", label: "Curtailment", icon: ShieldAlert },
   { id: "sites", label: "Sites", icon: SunMedium },
   { id: "usage", label: "Usage", icon: Gauge },
   { id: "generation", label: "Generation", icon: Sun },
@@ -42,7 +44,7 @@ export const NAV = [
 export type NavId = (typeof NAV)[number]["id"];
 
 /** The destinations that are actually built. The rest render inert. */
-const LIVE: ReadonlySet<string> = new Set(["dashboard", "forecasting", "forecastPlus"]);
+const LIVE: ReadonlySet<string> = new Set(["dashboard", "curtailment", "forecasting", "forecastPlus"]);
 
 interface Props {
   title: string;
