@@ -1,6 +1,6 @@
 # Code Map (graphify)
 
-_53 files · 187 exported symbols · regenerate with `npm run graphify`._
+_55 files · 199 exported symbols · regenerate with `npm run graphify`._
 
 Read this map to locate code, then open only the file(s) you need. Signatures are compact (params + annotated return type); tags like `[memo]` note wrappers.
 
@@ -67,6 +67,10 @@ Read this map to locate code, then open only the file(s) you need. Signatures ar
 
 ## src/components/dashboard/FrequencyPanel.tsx
 - FrequencyPanel({ tick, trace, }: { tick: SystemTick; trace: { ts: number; frequencyHz: number }[]; })
+
+## src/components/dashboard/GridRiskPanel.tsx
+- GridRiskCard({ feederId, onClick }: CardProps)
+- GridRiskSidePanel({ feederId, open, onClose }: SidePanelProps)
 
 ## src/components/dashboard/RampPanel.tsx
 - RampPanel({ now, units, feederId, }: { now: number; units: (UnitTick | BessTick)[]; feederId: string; })  [memo]
@@ -145,6 +149,7 @@ Read this map to locate code, then open only the file(s) you need. Signatures ar
 - fn useStackSeries(feederId: string, intervalMs): { rows: StackRow[]; now: number }
 - fn useFleetTick(feederId: string, intervalMs): { ts: number; units: (UnitTick | BessTick)[]; buses: BusTick[]; }
 - fn useIsStale(lastTs: number, expectedIntervalMs: number): boolean
+- fn useGridRisk(feederId: string, customWeights?: RiskWeights, intervalMs): { gri: GridRiskIndex; history: GridRiskHistoryPoint[]; now: number; }
 
 ## src/lib/useTheme.ts
 - fn useTheme(): "dark" | "light"
@@ -257,6 +262,17 @@ Read this map to locate code, then open only the file(s) you need. Signatures ar
 - fn evEnrolledShare(ev: EvFleet)
 - fn unitById(f: FeederModel, id: string): Unit | undefined
 - fn busById(f: FeederModel, id: string): Bus | undefined
+
+## src/pipeline/system/gridRisk.ts
+- type RiskTier
+- interface GridRiskSubIndex
+- interface PreventiveWarning
+- interface GridRiskIndex
+- interface GridRiskHistoryPoint
+- interface RiskWeights
+- const DEFAULT_RISK_WEIGHTS
+- fn computeGridRiskIndex(tick: SystemTick, unitTicks: UnitTick[], busTicks: BusTick[], feeder: FeederModel, customWeights: RiskWeights): GridRiskIndex
+- fn generateGridRiskHistory(now: number, feederId: string, durationHours, stepMinutes): GridRiskHistoryPoint[]
 
 ## src/pipeline/system/source.ts
 - fn socAt(h: number)

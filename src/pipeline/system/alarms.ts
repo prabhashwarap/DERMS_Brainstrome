@@ -24,6 +24,7 @@ import {
   classifyFloor,
 } from "./thresholds";
 import type { Alarm, BessTick, BusTick, FeederModel, SystemTick, UnitTick } from "./types";
+import { computeGridRiskIndex } from "./gridRisk";
 
 /** A live alarm condition, before the lifecycle fields are attached. */
 export type AlarmCondition = Pick<Alarm, "id" | "severity" | "source" | "message">;
@@ -196,6 +197,29 @@ export function evaluateAlarms(
         severity: marginLevel === "critical" ? "critical" : "warning",
         source: { kind: "bus", id: b.busId, label: bus?.name ?? b.busId },
         message: `Only ${b.stabilityMarginPct.toFixed(0)} % of the statutory ±5 % band left`,
+      });
+    }
+  }
+
+  /* --- grid risk index (GRI): composite operational warnings -------- */
+
+  const gri = computeGridRiskIndex(tick, unitTicks, busTicks, f);
+  if (gri.tier === "critical" || gri.tier === "high") {
+    out.push({
+      id: "gri-composite-warning",
+      severity: gri.tier === "critical" ? "critical" : "warning",
+      source: system("grid-risk"),
+      message: `Grid Risk Index ${gri.score}/100 (${gri.tier.toUpperCase()}) — ${gri.primaryRiskDriver.name} (${gri.primaryRiskDriver.score}/100)`,
+    });
+  }
+
+  for (const warn of gri.preventiveWarnings) {
+    if (warn.severity === "critical" || warn.severity === "warning") {
+      out.push({
+        id: `gri-${warn.id}`,
+        severity: warn.severity,
+        source: system("grid-risk"),
+        message: `[Preventive Warning] ${warn.title}: ${warn.rootCause}`,
       });
     }
   }

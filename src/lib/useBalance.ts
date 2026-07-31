@@ -23,6 +23,14 @@ import {
   sampleSystemTick,
   sampleUnitTicks,
 } from "@/pipeline/system/source";
+import {
+  computeGridRiskIndex,
+  generateGridRiskHistory,
+  type GridRiskHistoryPoint,
+  type GridRiskIndex,
+  type RiskWeights,
+} from "@/pipeline/system/gridRisk";
+import { feederModel } from "@/pipeline/system/fleet";
 import type {
   BessTick,
   BusTick,
@@ -202,4 +210,42 @@ export function useIsStale(lastTs: number, expectedIntervalMs: number): boolean 
     return () => clearInterval(id);
   }, [expectedIntervalMs]);
   return Date.now() - lastTs > expectedIntervalMs * 3;
+}
+
+/**
+ * Grid Risk Index real-time hook.
+ * Returns real-time composite GRI, sub-indices, history points, and operational warnings.
+ */
+export function useGridRisk(
+  feederId: string,
+  customWeights?: RiskWeights,
+  intervalMs = 1000
+): {
+  gri: GridRiskIndex;
+  history: GridRiskHistoryPoint[];
+  now: number;
+} {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs, feederId]);
+
+  const f = useMemo(() => feederModel(feederId), [feederId]);
+
+  const gri = useMemo(() => {
+    const t = sampleSystemTick(now, feederId);
+    const uTicks = sampleUnitTicks(now, feederId);
+    const bTicks = sampleBusTicks(now, feederId);
+    return computeGridRiskIndex(t, uTicks, bTicks, f, customWeights);
+  }, [now, feederId, f, customWeights]);
+
+  // Generate 24h history memoised on feeder change or every 60s
+  const historyWindow = Math.floor(now / 60_000);
+  const history = useMemo(() => {
+    return generateGridRiskHistory(historyWindow * 60_000, feederId, 24, 30);
+  }, [historyWindow, feederId]);
+
+  return { gri, history, now };
 }

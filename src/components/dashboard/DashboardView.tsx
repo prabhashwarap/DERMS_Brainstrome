@@ -36,7 +36,8 @@
  * that does not exist.
  */
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { Maximize2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import {
   Select,
@@ -53,11 +54,12 @@ import { BatteryStorageChart } from "./BatteryStorageChart";
 import { SupplyMix } from "./SupplyMix";
 import { SolarToday } from "./SolarToday";
 import { EventsPanel } from "./EventsPanel";
+import { GridRiskSidePanel } from "./GridRiskPanel";
 import { startOfLocalDay } from "@/pipeline/calendar";
 import { feederDayTotals } from "@/pipeline/system/derive";
 import { FEEDER_MODEL_LIST, feederModel } from "@/pipeline/system/fleet";
 import type { FeederModel, SystemTick } from "@/pipeline/system/types";
-import { useStackSeries, useSystemTick } from "@/lib/useBalance";
+import { useGridRisk, useStackSeries, useSystemTick } from "@/lib/useBalance";
 import { formatMW, formatMWh } from "@/lib/utils";
 
 export function DashboardView({
@@ -67,6 +69,7 @@ export function DashboardView({
   feederId: string;
   onFeederChange: (id: string) => void;
 }) {
+  const [isGriPanelOpen, setIsGriPanelOpen] = useState(false);
   const feeder = feederModel(feederId);
   const { tick, trace } = useSystemTick(feederId);
   const { rows, now } = useStackSeries(feederId);
@@ -80,6 +83,14 @@ export function DashboardView({
         onFeederChange={onFeederChange}
         tick={tick}
         now={now}
+        onOpenGriPanel={() => setIsGriPanelOpen(true)}
+      />
+
+      {/* Grid Risk Index Detailed Side Panel / Drawer */}
+      <GridRiskSidePanel
+        feederId={feederId}
+        open={isGriPanelOpen}
+        onClose={() => setIsGriPanelOpen(false)}
       />
 
       {/* The two charts that carry the page: what supply did, and whether
@@ -126,11 +137,13 @@ function FeederOverview({
   onFeederChange,
   tick,
   now,
+  onOpenGriPanel,
 }: {
   feeder: FeederModel;
   onFeederChange: (id: string) => void;
   tick: SystemTick;
   now: number;
+  onOpenGriPanel: () => void;
 }) {
   // Day totals are a real integral of the model from local midnight, sampled at
   // 15 min — the same resolution an AMI headend would give. Memoised on the
@@ -191,8 +204,8 @@ function FeederOverview({
         {/* Separator — visual hierarchy between scope and metrics */}
         <div className="hidden h-8 w-px bg-border/60 lg:block" aria-hidden />
 
-        {/* Four inline metrics — each value appears only here */}
-        <div className="grid flex-1 grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* Five inline metrics — including clickable Grid Risk Score tile */}
+        <div className="grid flex-1 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 items-stretch">
           <InlineStat
             label="Feeder demand"
             value={formatMW(tick.loadMW)}
@@ -215,8 +228,13 @@ function FeederOverview({
             label="Energy today"
             value={formatMWh(day.consumedMWh)}
             unit="MWh"
-            note={`${formatMWh(day.exportedMWh)} MWh exported · ${formatMW(headroomMW)} MW headroom`}
+            note={
+              day.exportedMWh > 0.01
+                ? `${formatMWh(day.exportedMWh)} MWh exp · ${formatMW(headroomMW)} MW room`
+                : `${formatMW(headroomMW)} MW headroom`
+            }
           />
+          <GridRiskStatTile feederId={feeder.id} onClick={onOpenGriPanel} />
         </div>
       </div>
     </Card>
@@ -236,6 +254,50 @@ function InlineStat({ label, value, unit, note }: { label: string; value: string
       </span>
       <span className="tnum text-[11px] text-muted-foreground">{note}</span>
     </div>
+  );
+}
+
+/** Clickable 5th stat tile for top feeder overview bar */
+function GridRiskStatTile({ feederId, onClick }: { feederId: string; onClick: () => void }) {
+  const { gri } = useGridRisk(feederId);
+  const colorMap = {
+    low: "border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5 hover:bg-emerald-500/15 hover:border-emerald-500/50",
+    moderate: "border-amber-500/30 text-amber-600 dark:text-amber-400 bg-amber-500/5 hover:bg-amber-500/15 hover:border-amber-500/50",
+    high: "border-orange-500/30 text-orange-600 dark:text-orange-400 bg-orange-500/5 hover:bg-orange-500/15 hover:border-orange-500/50",
+    critical: "border-rose-500/40 text-rose-600 dark:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 hover:border-rose-500/80 animate-pulse",
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`group flex flex-col justify-between gap-0.5 rounded-lg border p-2 text-left transition-all cursor-pointer ${colorMap[gri.tier]}`}
+      title="Click to view detailed Grid Risk Security Panel"
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-medium uppercase tracking-[0.15em] text-muted-foreground group-hover:text-primary transition-colors flex items-center gap-1">
+          Grid Risk Score
+          <Maximize2 className="h-2.5 w-2.5 opacity-60 group-hover:opacity-100" />
+        </span>
+        <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded-full border border-current">
+          {gri.tier}
+        </span>
+      </div>
+
+      <div className="flex items-baseline gap-1 my-0.5">
+        <span className="tnum text-lg font-bold leading-tight text-foreground">{gri.score}</span>
+        <span className="text-[11px] font-medium text-muted-foreground">/ 100</span>
+        <span className="ml-auto text-[10px] font-semibold flex items-center">
+          {gri.trend === "rising" && <span className="text-rose-500">↑+{Math.abs(gri.trendDelta)}</span>}
+          {gri.trend === "falling" && <span className="text-emerald-500">↓-{Math.abs(gri.trendDelta)}</span>}
+          {gri.trend === "stable" && <span className="text-muted-foreground">→</span>}
+        </span>
+      </div>
+
+      <span className="tnum text-[11px] text-muted-foreground truncate">
+        {gri.primaryRiskDriver.shortName} ({gri.primaryRiskDriver.score})
+      </span>
+    </button>
   );
 }
 
